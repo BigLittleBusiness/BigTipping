@@ -1,28 +1,212 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import {
+  boolean,
+  int,
+  json,
+  mysqlEnum,
+  mysqlTable,
+  text,
+  timestamp,
+  varchar,
+  index,
+  uniqueIndex,
+} from "drizzle-orm/mysql-core";
 
-/**
- * Core user table backing auth flow.
- * Extend this file with additional tables as your product grows.
- * Columns use camelCase to match both database fields and generated types.
- */
+// ── Users ────────────────────────────────────────────────────────────────────
 export const users = mysqlTable("users", {
-  /**
-   * Surrogate primary key. Auto-incremented numeric value managed by the database.
-   * Use this for relations between tables.
-   */
-  id: int("id").autoincrement().primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
-  name: text("name"),
-  email: varchar("email", { length: 320 }),
+  id:          int("id").autoincrement().primaryKey(),
+  openId:      varchar("openId", { length: 64 }).notNull().unique(),
+  name:        text("name"),
+  email:       varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  role:        mysqlEnum("role", ["system_admin", "tenant_admin", "entrant"]).default("entrant").notNull(),
+  tenantId:    int("tenantId"),
+  createdAt:   timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:   timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+// ── Tenants ──────────────────────────────────────────────────────────────────
+export const tenants = mysqlTable("tenants", {
+  id:          int("id").autoincrement().primaryKey(),
+  name:        varchar("name", { length: 255 }).notNull(),
+  slug:        varchar("slug", { length: 100 }).notNull().unique(),
+  description: text("description"),
+  logoUrl:     text("logoUrl"),
+  status:      mysqlEnum("status", ["active", "suspended", "trial"]).default("trial").notNull(),
+  contactEmail: varchar("contactEmail", { length: 320 }),
+  createdAt:   timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:   timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Tenant = typeof tenants.$inferSelect;
+export type InsertTenant = typeof tenants.$inferInsert;
+
+// ── Sports ───────────────────────────────────────────────────────────────────
+export const sports = mysqlTable("sports", {
+  id:       int("id").autoincrement().primaryKey(),
+  name:     mysqlEnum("name", ["AFL", "NRL", "Super Netball"]).notNull().unique(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Sport = typeof sports.$inferSelect;
+export type InsertSport = typeof sports.$inferInsert;
+
+// ── Teams ────────────────────────────────────────────────────────────────────
+export const teams = mysqlTable("teams", {
+  id:           int("id").autoincrement().primaryKey(),
+  sportId:      int("sportId").notNull(),
+  name:         varchar("name", { length: 255 }).notNull(),
+  abbreviation: varchar("abbreviation", { length: 10 }),
+  logoUrl:      text("logoUrl"),
+  isActive:     boolean("isActive").default(true).notNull(),
+  createdAt:    timestamp("createdAt").defaultNow().notNull(),
+}, (t) => [index("teams_sportId_idx").on(t.sportId)]);
+
+export type Team = typeof teams.$inferSelect;
+export type InsertTeam = typeof teams.$inferInsert;
+
+// ── Competitions ─────────────────────────────────────────────────────────────
+export const competitions = mysqlTable("competitions", {
+  id:          int("id").autoincrement().primaryKey(),
+  tenantId:    int("tenantId").notNull(),
+  sportId:     int("sportId").notNull(),
+  name:        varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  season:      varchar("season", { length: 20 }),
+  // Lifecycle: draft → active → round-by-round → completed
+  status:      mysqlEnum("status", ["draft", "active", "round-by-round", "completed"]).default("draft").notNull(),
+  scoringRules: json("scoringRules").$type<{
+    pointsPerCorrectTip: number;
+    bonusPerfectRound: number;
+    streakBonusEnabled: boolean;
+  }>(),
+  startDate:   timestamp("startDate"),
+  endDate:     timestamp("endDate"),
+  isPublic:    boolean("isPublic").default(true).notNull(),
+  createdAt:   timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:   timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => [
+  index("competitions_tenantId_idx").on(t.tenantId),
+  index("competitions_sportId_idx").on(t.sportId),
+]);
+
+export type Competition = typeof competitions.$inferSelect;
+export type InsertCompetition = typeof competitions.$inferInsert;
+
+// ── Rounds ───────────────────────────────────────────────────────────────────
+export const rounds = mysqlTable("rounds", {
+  id:              int("id").autoincrement().primaryKey(),
+  competitionId:   int("competitionId").notNull(),
+  roundNumber:     int("roundNumber").notNull(),
+  name:            varchar("name", { length: 100 }),
+  status:          mysqlEnum("status", ["upcoming", "open", "closed", "scored"]).default("upcoming").notNull(),
+  tipsOpenAt:      timestamp("tipsOpenAt"),
+  tipsCloseAt:     timestamp("tipsCloseAt"),
+  scoringCompleted: boolean("scoringCompleted").default(false).notNull(),
+  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:       timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => [
+  index("rounds_competitionId_idx").on(t.competitionId),
+  uniqueIndex("rounds_comp_round_unique").on(t.competitionId, t.roundNumber),
+]);
+
+export type Round = typeof rounds.$inferSelect;
+export type InsertRound = typeof rounds.$inferInsert;
+
+// ── Fixtures ─────────────────────────────────────────────────────────────────
+export const fixtures = mysqlTable("fixtures", {
+  id:         int("id").autoincrement().primaryKey(),
+  roundId:    int("roundId").notNull(),
+  homeTeamId: int("homeTeamId").notNull(),
+  awayTeamId: int("awayTeamId").notNull(),
+  venue:      varchar("venue", { length: 255 }),
+  startTime:  timestamp("startTime"),
+  status:     mysqlEnum("status", ["scheduled", "in_progress", "completed", "cancelled"]).default("scheduled").notNull(),
+  homeScore:  int("homeScore"),
+  awayScore:  int("awayScore"),
+  winnerId:   int("winnerId"),   // null = draw / not yet played
+  margin:     int("margin"),
+  createdAt:  timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:  timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => [index("fixtures_roundId_idx").on(t.roundId)]);
+
+export type Fixture = typeof fixtures.$inferSelect;
+export type InsertFixture = typeof fixtures.$inferInsert;
+
+// ── Tips ─────────────────────────────────────────────────────────────────────
+export const tips = mysqlTable("tips", {
+  id:            int("id").autoincrement().primaryKey(),
+  userId:        int("userId").notNull(),
+  fixtureId:     int("fixtureId").notNull(),
+  competitionId: int("competitionId").notNull(),
+  pickedTeamId:  int("pickedTeamId").notNull(),
+  isCorrect:     boolean("isCorrect"),   // null = not yet scored
+  pointsEarned:  int("pointsEarned").default(0).notNull(),
+  createdAt:     timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:     timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => [
+  index("tips_userId_idx").on(t.userId),
+  index("tips_fixtureId_idx").on(t.fixtureId),
+  uniqueIndex("tips_user_fixture_unique").on(t.userId, t.fixtureId),
+]);
+
+export type Tip = typeof tips.$inferSelect;
+export type InsertTip = typeof tips.$inferInsert;
+
+// ── Leaderboard Entries ───────────────────────────────────────────────────────
+export const leaderboardEntries = mysqlTable("leaderboard_entries", {
+  id:            int("id").autoincrement().primaryKey(),
+  competitionId: int("competitionId").notNull(),
+  userId:        int("userId").notNull(),
+  totalPoints:   int("totalPoints").default(0).notNull(),
+  rank:          int("rank").default(0).notNull(),
+  previousRank:  int("previousRank").default(0).notNull(),
+  correctTips:   int("correctTips").default(0).notNull(),
+  totalTips:     int("totalTips").default(0).notNull(),
+  currentStreak: int("currentStreak").default(0).notNull(),
+  bestStreak:    int("bestStreak").default(0).notNull(),
+  updatedAt:     timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => [
+  index("lb_competitionId_idx").on(t.competitionId),
+  uniqueIndex("lb_comp_user_unique").on(t.competitionId, t.userId),
+]);
+
+export type LeaderboardEntry = typeof leaderboardEntries.$inferSelect;
+export type InsertLeaderboardEntry = typeof leaderboardEntries.$inferInsert;
+
+// ── Prizes ───────────────────────────────────────────────────────────────────
+export const prizes = mysqlTable("prizes", {
+  id:            int("id").autoincrement().primaryKey(),
+  competitionId: int("competitionId").notNull(),
+  tenantId:      int("tenantId").notNull(),
+  name:          varchar("name", { length: 255 }).notNull(),
+  description:   text("description"),
+  type:          mysqlEnum("type", ["weekly", "season", "special"]).default("weekly").notNull(),
+  roundId:       int("roundId"),   // null = season prize
+  awardedToUserId: int("awardedToUserId"),
+  isAwarded:     boolean("isAwarded").default(false).notNull(),
+  createdAt:     timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:     timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => [index("prizes_competitionId_idx").on(t.competitionId)]);
+
+export type Prize = typeof prizes.$inferSelect;
+export type InsertPrize = typeof prizes.$inferInsert;
+
+// ── Competition Entrants (join table) ─────────────────────────────────────────
+export const competitionEntrants = mysqlTable("competition_entrants", {
+  id:            int("id").autoincrement().primaryKey(),
+  competitionId: int("competitionId").notNull(),
+  userId:        int("userId").notNull(),
+  joinedAt:      timestamp("joinedAt").defaultNow().notNull(),
+  isActive:      boolean("isActive").default(true).notNull(),
+}, (t) => [
+  index("ce_competitionId_idx").on(t.competitionId),
+  uniqueIndex("ce_comp_user_unique").on(t.competitionId, t.userId),
+]);
+
+export type CompetitionEntrant = typeof competitionEntrants.$inferSelect;
+export type InsertCompetitionEntrant = typeof competitionEntrants.$inferInsert;

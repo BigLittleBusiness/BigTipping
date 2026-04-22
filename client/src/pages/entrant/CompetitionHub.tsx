@@ -1,0 +1,325 @@
+import { useState } from "react";
+import { useParams } from "wouter";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import { Trophy, CheckCircle2, XCircle, Circle, ChevronLeft, Flame } from "lucide-react";
+import { Link } from "wouter";
+
+const RANK_BADGE: Record<number, { label: string; cls: string }> = {
+  1: { label: "Gold",   cls: "bg-yellow-100 text-yellow-700 border border-yellow-300" },
+  2: { label: "Silver", cls: "bg-gray-100 text-gray-600 border border-gray-300" },
+  3: { label: "Bronze", cls: "bg-orange-100 text-orange-700 border border-orange-300" },
+};
+
+export default function CompetitionHub() {
+  const params = useParams<{ id: string }>();
+  const compId = Number(params.id);
+  const { user } = useAuth();
+
+  const { data: comp } = trpc.competitions.get.useQuery({ id: compId });
+  const { data: currentRound } = trpc.rounds.getCurrent.useQuery({ competitionId: compId });
+  const { data: allRounds } = trpc.rounds.list.useQuery({ competitionId: compId });
+  const { data: leaderboard } = trpc.leaderboard.get.useQuery({ competitionId: compId });
+  const { data: myPosition } = trpc.leaderboard.myPosition.useQuery({ competitionId: compId });
+  const { data: prizes } = trpc.prizes.list.useQuery({ competitionId: compId });
+
+  const [selectedRoundId, setSelectedRoundId] = useState<number | null>(null);
+  const activeRoundId = selectedRoundId ?? currentRound?.id ?? null;
+
+  const { data: roundTips, refetch: refetchTips } = trpc.tips.myRoundTips.useQuery(
+    { roundId: activeRoundId!, competitionId: compId },
+    { enabled: !!activeRoundId }
+  );
+  const { data: history } = trpc.tips.myHistory.useQuery({ competitionId: compId });
+
+  const submitTip = trpc.tips.submit.useMutation({
+    onSuccess: () => { refetchTips(); toast.success("Tip saved!"); },
+    onError: () => toast.error("Could not save tip."),
+  });
+
+  const myEntry = leaderboard?.find(e => e.userId === user?.id);
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Top nav */}
+      <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-3">
+        <Link href="/my-competitions">
+          <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground">
+            <ChevronLeft size={14} /> Back
+          </Button>
+        </Link>
+        <div className="w-7 h-7 rounded bg-accent flex items-center justify-center">
+          <Trophy size={14} className="text-accent-foreground" />
+        </div>
+        <span className="font-heading font-bold text-base truncate">{comp?.name ?? "Competition"}</span>
+      </header>
+
+      <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+        {/* My stats card */}
+        {myEntry && (
+          <Card className="bg-primary text-primary-foreground">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium opacity-70 uppercase tracking-wide">My Position</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    {myEntry.rankBadge ? (
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${RANK_BADGE[myEntry.rank]?.cls ?? ""}`}>
+                        {myEntry.rankBadge}
+                      </span>
+                    ) : (
+                      <span className="text-2xl font-bold font-mono">#{myEntry.rank}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-bold font-mono">{myEntry.totalPoints}</p>
+                  <p className="text-xs opacity-70">points</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xl font-bold font-mono">{myEntry.correctTips}/{myEntry.totalTips}</p>
+                  <p className="text-xs opacity-70">correct</p>
+                </div>
+                {myEntry.currentStreak > 0 && (
+                  <div className="flex items-center gap-1 text-accent">
+                    <Flame size={16} />
+                    <span className="font-bold">{myEntry.currentStreak}</span>
+                    <span className="text-xs opacity-70">streak</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <Tabs defaultValue="tips">
+          <TabsList className="w-full">
+            <TabsTrigger value="tips" className="flex-1">Submit Tips</TabsTrigger>
+            <TabsTrigger value="history" className="flex-1">My History</TabsTrigger>
+            <TabsTrigger value="leaderboard" className="flex-1">Leaderboard</TabsTrigger>
+            <TabsTrigger value="prizes" className="flex-1">Prizes</TabsTrigger>
+          </TabsList>
+
+          {/* ── TIPS TAB ───────────────────────────────────────────── */}
+          <TabsContent value="tips" className="mt-4 space-y-4">
+            {/* Round selector */}
+            {allRounds && allRounds.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                {allRounds.map(r => (
+                  <button
+                    key={r.id}
+                    onClick={() => setSelectedRoundId(r.id)}
+                    className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+                      activeRoundId === r.id
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {r.name ?? `Round ${r.roundNumber}`}
+                    {r.status === "open" && <span className="ml-1 text-green-500">●</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {!activeRoundId ? (
+              <Card>
+                <CardContent className="text-center py-12 text-muted-foreground">
+                  No open round right now. Check back soon!
+                </CardContent>
+              </Card>
+            ) : !roundTips?.length ? (
+              <Card>
+                <CardContent className="text-center py-12 text-muted-foreground">
+                  No fixtures in this round yet.
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {roundTips.map(({ fixture, tip, pickedTeam }) => {
+                  const isOpen = allRounds?.find(r => r.id === activeRoundId)?.status === "open";
+                  const isScored = fixture.status === "completed";
+                  return (
+                    <Card key={fixture.id} className={
+                      tip?.isCorrect === true ? "border-green-300 bg-green-50/30" :
+                      tip?.isCorrect === false ? "border-red-300 bg-red-50/30" : ""
+                    }>
+                      <CardContent className="py-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          {tip?.isCorrect === true && <CheckCircle2 size={16} className="text-green-600" />}
+                          {tip?.isCorrect === false && <XCircle size={16} className="text-red-500" />}
+                          {tip?.isCorrect === null && tip && <Circle size={16} className="text-muted-foreground" />}
+                          <span className="text-xs text-muted-foreground">{fixture.venue ?? ""}</span>
+                          {isScored && fixture.winner && (
+                            <span className="text-xs text-green-600 font-semibold ml-auto">
+                              Result: {fixture.winner.name} ({fixture.homeScore}–{fixture.awayScore})
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {/* Home team */}
+                          <TeamButton
+                            team={fixture.homeTeam}
+                            selected={tip?.pickedTeamId === fixture.homeTeamId}
+                            correct={isScored ? fixture.winnerId === fixture.homeTeamId : undefined}
+                            disabled={!isOpen}
+                            onClick={() => isOpen && submitTip.mutate({ fixtureId: fixture.id, competitionId: compId, pickedTeamId: fixture.homeTeamId })}
+                          />
+                          <span className="text-xs font-bold text-muted-foreground shrink-0">VS</span>
+                          {/* Away team */}
+                          <TeamButton
+                            team={fixture.awayTeam}
+                            selected={tip?.pickedTeamId === fixture.awayTeamId}
+                            correct={isScored ? fixture.winnerId === fixture.awayTeamId : undefined}
+                            disabled={!isOpen}
+                            onClick={() => isOpen && submitTip.mutate({ fixtureId: fixture.id, competitionId: compId, pickedTeamId: fixture.awayTeamId })}
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* ── HISTORY TAB ────────────────────────────────────────── */}
+          <TabsContent value="history" className="mt-4">
+            <Card>
+              <CardContent className="p-0">
+                {!history?.length ? (
+                  <div className="text-center py-12 text-muted-foreground">No tips submitted yet.</div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {history.map(t => (
+                      <div key={t.id} className="flex items-center justify-between px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          {t.isCorrect === true && <CheckCircle2 size={16} className="text-green-600 shrink-0" />}
+                          {t.isCorrect === false && <XCircle size={16} className="text-red-500 shrink-0" />}
+                          {t.isCorrect === null && <Circle size={16} className="text-muted-foreground shrink-0" />}
+                          <span className="text-sm font-medium">{t.pickedTeam?.name ?? "Unknown"}</span>
+                        </div>
+                        <span className="font-mono text-sm font-bold text-primary">+{t.pointsEarned}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ── LEADERBOARD TAB ────────────────────────────────────── */}
+          <TabsContent value="leaderboard" className="mt-4">
+            <Card>
+              <CardContent className="p-0">
+                {!leaderboard?.length ? (
+                  <div className="text-center py-12 text-muted-foreground">No entries yet.</div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {leaderboard.map(entry => (
+                      <div
+                        key={entry.id}
+                        className={`flex items-center gap-3 px-4 py-3 ${entry.userId === user?.id ? "bg-primary/5" : ""}`}
+                      >
+                        <div className="w-10 shrink-0">
+                          {entry.rankBadge ? (
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${RANK_BADGE[entry.rank]?.cls ?? ""}`}>
+                              {entry.rankBadge}
+                            </span>
+                          ) : (
+                            <span className="font-mono text-sm text-muted-foreground">#{entry.rank}</span>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium truncate ${entry.userId === user?.id ? "text-primary font-bold" : ""}`}>
+                            {entry.user?.name ?? "Unknown"}
+                            {entry.userId === user?.id && <span className="text-xs ml-1">(you)</span>}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{entry.correctTips}/{entry.totalTips} correct</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-mono font-bold text-primary">{entry.totalPoints}</p>
+                          <p className="text-xs text-muted-foreground">pts</p>
+                        </div>
+                        {entry.currentStreak > 1 && (
+                          <div className="flex items-center gap-0.5 text-secondary shrink-0">
+                            <Flame size={14} />
+                            <span className="text-xs font-bold">{entry.currentStreak}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ── PRIZES TAB ─────────────────────────────────────────── */}
+          <TabsContent value="prizes" className="mt-4">
+            {!prizes?.length ? (
+              <Card>
+                <CardContent className="text-center py-12 text-muted-foreground">No prizes announced yet.</CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 gap-3">
+                {prizes.map(p => (
+                  <Card key={p.id}>
+                    <CardContent className="py-4">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-accent/20 rounded-lg shrink-0">
+                          <Trophy size={18} className="text-accent-foreground" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold text-sm">{p.name}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{p.description}</p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-muted capitalize">{p.type}</span>
+                            {p.isAwarded && (
+                              <span className="text-xs text-green-600 font-semibold flex items-center gap-1">
+                                <CheckCircle2 size={12} /> Awarded to {p.awardedTo?.name ?? "winner"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </main>
+    </div>
+  );
+}
+
+function TeamButton({ team, selected, correct, disabled, onClick }: {
+  team: { id: number; name: string; abbreviation?: string | null } | null;
+  selected: boolean;
+  correct?: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const base = "flex-1 flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all font-medium text-sm";
+  const state = selected
+    ? correct === true ? "border-green-500 bg-green-50 text-green-700"
+      : correct === false ? "border-red-400 bg-red-50 text-red-600"
+      : "border-primary bg-primary/10 text-primary"
+    : disabled
+    ? "border-border bg-muted/30 text-muted-foreground cursor-default"
+    : "border-border hover:border-primary/50 hover:bg-primary/5 cursor-pointer";
+
+  return (
+    <button className={`${base} ${state}`} onClick={onClick} disabled={disabled}>
+      <span className="text-lg font-bold">{team?.abbreviation ?? team?.name?.charAt(0) ?? "?"}</span>
+      <span className="text-xs mt-0.5 text-center leading-tight">{team?.name ?? "TBD"}</span>
+    </button>
+  );
+}

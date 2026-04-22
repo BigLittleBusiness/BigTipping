@@ -2,27 +2,37 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
+import { tenantsRouter } from "./routers/tenants";
+import { sportsRouter } from "./routers/sports";
+import { competitionsRouter } from "./routers/competitions";
+import { roundsRouter } from "./routers/rounds";
+import { fixturesRouter } from "./routers/fixtures";
+import { tipsRouter } from "./routers/tips";
+import { leaderboardRouter } from "./routers/leaderboard";
+import { prizesRouter } from "./routers/prizes";
+import { statsRouter } from "./routers/stats";
+import { seedRouter } from "./routers/seed";
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
+      return { success: true } as const;
     }),
   }),
-
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  tenants:      tenantsRouter,
+  sports:       sportsRouter,
+  competitions: competitionsRouter,
+  rounds:       roundsRouter,
+  fixtures:     fixturesRouter,
+  tips:         tipsRouter,
+  leaderboard:  leaderboardRouter,
+  prizes:       prizesRouter,
+  stats:        statsRouter,
+  seed:         seedRouter,
 });
 
 export type AppRouter = typeof appRouter;
