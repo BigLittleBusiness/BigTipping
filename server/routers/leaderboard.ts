@@ -2,7 +2,8 @@ import { z } from "zod";
 import { eq, and, desc } from "drizzle-orm";
 import { router, tenantAdminProcedure, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
-import { leaderboardEntries, tips, fixtures, rounds, users, competitions } from "../../drizzle/schema";
+import { leaderboardEntries, tips, fixtures, rounds, users, competitions, tenants } from "../../drizzle/schema";
+import { EmailService } from "../services/emailService";
 
 export const leaderboardRouter = router({
   // Get leaderboard for a competition (top N)
@@ -134,6 +135,118 @@ export const leaderboardRouter = router({
 
       // Mark round as scored
       await db.update(rounds).set({ status: "scored", scoringCompleted: true }).where(eq(rounds.id, input.roundId));
+
+      // ── Post-scoring emails ────────────────────────────────────────────────
+      // Fetch the round details for email placeholders
+      const [roundRow] = await db.select().from(rounds).where(eq(rounds.id, input.roundId)).limit(1);
+      const roundNumber = roundRow?.roundNumber ?? input.roundId;
+      const totalFixtures = fixtureIds.length;
+
+      // Send per-entrant round results emails (non-fatal)
+      const allEntrantsForEmail = await db.select({ userId: leaderboardEntries.userId })
+        .from(leaderboardEntries)
+        .where(eq(leaderboardEntries.competitionId, input.competitionId));
+
+      for (const entrant of allEntrantsForEmail) {
+        const [entrantUser] = await db.select({ email: users.email, name: users.name })
+          .from(users).where(eq(users.id, entrant.userId)).limit(1);
+        if (!entrantUser?.email) continue;
+
+        const userTips = tipsByUser[entrant.userId] ?? [];
+        const correct = userTips.filter(t => winnerMap[t.fixtureId] !== null && t.pickedTeamId === winnerMap[t.fixtureId]).length;
+
+        EmailService.sendEmail({
+          to: entrantUser.email,
+          templateKey: "entrant_round_results",
+          tenantId: comp.tenantId,
+          placeholders: {
+            user_name: entrantUser.name ?? entrantUser.email,
+            competition_name: comp.name,
+            round_number: roundNumber,
+            score: correct,
+            total: totalFixtures,
+            results_table_rows: "",
+            leaderboard_url: `/comp/${input.competitionId}`,
+          },
+        }).catch(() => { /* non-fatal */ });
+      }
+
+      // Determine round winner (rank 1 after re-ranking)
+      const [winner] = await db.select().from(leaderboardEntries)
+        .where(and(
+          eq(leaderboardEntries.competitionId, input.competitionId),
+          eq(leaderboardEntries.rank, 1)
+        )).limit(1);
+
+      if (winner) {
+        const [winnerUser] = await db.select({ email: users.email, name: users.name })
+          .from(users).where(eq(users.id, winner.userId)).limit(1);
+
+        // Notify winner
+        if (winnerUser?.email) {
+          EmailService.sendEmail({
+            to: winnerUser.email,
+            templateKey: "entrant_weekly_winner",
+            tenantId: comp.tenantId,
+            placeholders: {
+              user_name: winnerUser.name ?? winnerUser.email,
+              competition_name: comp.name,
+              round_number: roundNumber,
+              score: winner.correctTips,
+              total: totalFixtures,
+              prize_description: "Check with your competition organiser",
+              leaderboard_url: `/comp/${input.competitionId}`,
+            },
+          }).catch(() => { /* non-fatal */ });
+        }
+      }
+
+      // ── Admin notification emails ───────────────────────────────────────────────
+      // Fetch the tenant admin email for this competition
+      const [tenantRow] = await db.select().from(tenants)
+        .where(eq(tenants.id, comp.tenantId)).limit(1);
+      const adminEmail = tenantRow?.contactEmail;
+      const adminName = tenantRow?.name ?? "Admin";
+
+      if (adminEmail) {
+        // admin_round_scored notification
+        EmailService.sendEmail({
+          to: adminEmail,
+          templateKey: "admin_round_scored",
+          tenantId: comp.tenantId,
+          transactional: true,
+          placeholders: {
+            user_name: adminName,
+            competition_name: comp.name,
+            round_number: roundNumber,
+            leaderboard_url: `/admin/competitions/${input.competitionId}`,
+          },
+        }).catch(() => { /* non-fatal */ });
+
+        // admin_round_winner notification (if winner exists)
+        if (winner) {
+          const [winnerUser2] = await db.select({ name: users.name })
+            .from(users).where(eq(users.id, winner.userId)).limit(1);
+          const winnerName = winnerUser2?.name ?? `User #${winner.userId}`;
+
+          EmailService.sendEmail({
+            to: adminEmail,
+            templateKey: "admin_round_winner",
+            tenantId: comp.tenantId,
+            transactional: true,
+            placeholders: {
+              user_name: adminName,
+              competition_name: comp.name,
+              round_number: roundNumber,
+              winner_name: winnerName,
+              winner_score: winner.correctTips,
+              margin: 0,
+              prize_description: "Check prize configuration",
+              leaderboard_url: `/admin/competitions/${input.competitionId}`,
+            },
+          }).catch(() => { /* non-fatal */ });
+        }
+      }
 
       return { scored: relevantTips.length };
     }),

@@ -3,7 +3,7 @@ import { getLoginUrl } from "@/const";
 import { cn } from "@/lib/utils";
 import {
   BarChart3, Building2, ChevronRight, Layers, LogOut,
-  Settings, Shield, Trophy, Users, Zap
+  Mail, Settings, Shield, Trophy, Users, Zap
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -26,6 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Competitions",      href: "/tenant/competitions",icon: <Trophy size={18} />,   roles: ["tenant_admin"] },
   { label: "Entrants",          href: "/tenant/entrants",   icon: <Users size={18} />,     roles: ["tenant_admin"] },
   { label: "Prizes",            href: "/tenant/prizes",     icon: <Trophy size={18} />,    roles: ["tenant_admin"] },
+  { label: "Email Settings",    href: "/tenant/email-settings", icon: <Mail size={18} />,   roles: ["tenant_admin"] },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

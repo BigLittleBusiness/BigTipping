@@ -112,9 +112,51 @@
 - [x] Item 3: Deadline banner on entrant tip submission screen — blue info banner normally, orange urgent banner when <24h remaining
 
 ## Phase 15: Result Entry & Tip Lock-out
-- [ ] Fixture result entry screen: enterResults mutation (mark winner per fixture, trigger scoring)
-- [ ] Fixture result entry screen: RoundResults admin UI page with per-fixture winner selector
-- [ ] Fixture result entry screen: link from CompetitionDetail rounds tab to result entry
-- [ ] Tip lock-out: server-side deadline check in submitTip procedure
-- [ ] Tip lock-out: visual locked state on entrant tip cards (lock icon, greyed out, "Tips Closed" badge)
-- [ ] Tests for result entry and lock-out logic
+- [x] Fixture result entry screen: enterResults mutation (mark winner per fixture, trigger scoring)
+- [x] Fixture result entry screen: RoundResults admin UI page with per-fixture winner selector
+- [x] Fixture result entry screen: link from CompetitionDetail rounds tab to result entry
+- [x] Tip lock-out: server-side deadline check in submitTip procedure (checks round.status + tipsCloseAt)
+- [x] Tip lock-out: visual locked state on entrant tip cards (Lock icon, opacity-75, locked banner, toast on click)
+- [x] Tests for result entry and lock-out logic (16 new tests in phase15.test.ts — 68 total passing)
+
+## Phase 16: Email Subsystem
+
+### Schema & Seed
+- [x] Add tenant_email_settings table to Drizzle schema
+- [x] Add email_templates table to Drizzle schema
+- [x] Add email_events table to Drizzle schema
+- [x] Add user_email_preferences table to Drizzle schema
+- [x] Generate and apply migration for all 4 new tables
+- [x] Seed 13 default email templates (5 admin + 8 entrant) per tenant
+
+### EmailService
+- [x] Build server/services/emailService.ts: SES sending, placeholder replacement, logo injection, inline CSS
+- [x] Implement bounce/complaint handling: mark invalidEmail / marketingDisabled on user_email_preferences
+- [x] Log all sends to email_events table
+- [x] Gate all sends on invalidEmail and marketingDisabled flags
+
+### tRPC Routers
+- [x] Build email.templates router: list, update (subject/body/isEnabled)
+- [x] Build email.branding router: get/update TenantEmailSettings, logo upload
+- [x] Build email.testSend router: send test email to admin's own address
+- [x] Build email.bounceDashboard router: invalid count, complaint count, open rate (30d)
+
+### Admin Email Settings Page
+- [x] Build /tenant/email-settings page with 3 tabs: Templates, Branding, Bounce Dashboard
+- [x] Templates tab: table with toggle ON/OFF and Customise button per template
+- [x] Template customise modal: subject input, HTML body textarea, placeholder helper
+- [x] Branding tab: logo file upload (drag-and-drop), logo position radio, colour picker, footer/address textarea
+- [x] Bounce Dashboard tab: stats cards (invalid emails, complaints, open rate)
+- [x] Preview modal: render email HTML with sample data
+- [x] Send Test Email button per template
+
+### Triggers & Webhook
+- [x] Wire entrant_join_confirmation trigger in invites.joinViaInvite
+- [x] Wire entrant_round_results + admin_round_scored + admin_round_winner triggers in leaderboard.scoreRound
+- [x] Wire entrant_tips_closing_24h and entrant_tips_closing_4h triggers in rounds.sendRoundReminder
+- [x] Build POST /api/ses-webhook endpoint for SES bounce/complaint SNS notifications
+- [x] Add Email Settings nav link to Tenant Admin sidebar
+
+### Tests
+- [x] Unit tests: placeholder replacement, bounce handling, email gating (invalidEmail / marketingDisabled) — 27 tests in email.test.ts
+- [x] Unit tests: template enable/disable logic (EMAIL_TEMPLATE_DEFAULTS and TEMPLATE_PLACEHOLDERS coverage)

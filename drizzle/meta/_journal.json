@@ -36,6 +36,13 @@
       "when": 1776938944202,
       "tag": "0004_brief_spectrum",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1776945110478,
+      "tag": "0005_nervous_hawkeye",
+      "breakpoints": true
     }
   ]
 }

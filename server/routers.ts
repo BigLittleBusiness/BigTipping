@@ -14,6 +14,7 @@ import { statsRouter } from "./routers/stats.ts";
 import { seedRouter } from "./routers/seed.ts";
 import { contactRouter } from "./routers/contact.ts";
 import { invitesRouter } from "./routers/invites.ts";
+import { emailRouter } from "./routers/email.ts";
 
 export const appRouter = router({
   system: systemRouter,
@@ -37,6 +38,7 @@ export const appRouter = router({
   seed:         seedRouter,
   contact:      contactRouter,
   invites:      invitesRouter,
+  email:        emailRouter,
 });
 
 export type AppRouter = typeof appRouter;

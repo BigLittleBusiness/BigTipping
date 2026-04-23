@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { router, systemAdminProcedure, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
 import { tenants, users } from "../../drizzle/schema";
+import { seedEmailTemplatesForTenant } from "./email";
 
 export const tenantsRouter = router({
   // System admin: list all tenants
@@ -41,7 +42,12 @@ export const tenantsRouter = router({
         status: "trial",
       });
       const rows = await db.select().from(tenants).where(eq(tenants.slug, input.slug)).limit(1);
-      return rows[0];
+      const newTenant = rows[0];
+      // Seed default email templates for the new tenant (non-fatal)
+      if (newTenant) {
+        seedEmailTemplatesForTenant(newTenant.id).catch(() => { /* non-fatal */ });
+      }
+      return newTenant;
     }),
 
   // System admin: update tenant status

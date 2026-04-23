@@ -243,3 +243,75 @@ export const roundReminders = mysqlTable("round_reminders", {
 
 export type RoundReminder = typeof roundReminders.$inferSelect;
 export type InsertRoundReminder = typeof roundReminders.$inferInsert;
+
+// ── Tenant Email Settings ─────────────────────────────────────────────────────
+export const tenantEmailSettings = mysqlTable("tenant_email_settings", {
+  id:              int("id").autoincrement().primaryKey(),
+  tenantId:        int("tenantId").notNull().unique(),
+  logoUrl:         text("logoUrl"),
+  logoPosition:    mysqlEnum("logoPosition", ["top", "bottom"]).default("top").notNull(),
+  primaryColor:    varchar("primaryColor", { length: 7 }).default("#2B4EAE").notNull(),
+  footerText:      text("footerText"),
+  businessAddress: text("businessAddress"),
+  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:       timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => [
+  index("tes_tenantId_idx").on(t.tenantId),
+]);
+export type TenantEmailSettings = typeof tenantEmailSettings.$inferSelect;
+export type InsertTenantEmailSettings = typeof tenantEmailSettings.$inferInsert;
+
+// ── Email Templates ───────────────────────────────────────────────────────────
+export const emailTemplates = mysqlTable("email_templates", {
+  id:           int("id").autoincrement().primaryKey(),
+  tenantId:     int("tenantId").notNull(),
+  templateKey:  varchar("templateKey", { length: 100 }).notNull(),
+  recipientRole: mysqlEnum("recipientRole", ["admin", "entrant"]).notNull(),
+  name:         varchar("name", { length: 200 }).notNull(),
+  triggerDesc:  text("triggerDesc"),
+  isEnabled:    boolean("isEnabled").default(true).notNull(),
+  subject:      varchar("subject", { length: 500 }).notNull(),
+  bodyHtml:     text("bodyHtml").notNull(),
+  bodyText:     text("bodyText"),
+  updatedAt:    timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => [
+  uniqueIndex("et_tenant_key_idx").on(t.tenantId, t.templateKey),
+  index("et_tenantId_idx").on(t.tenantId),
+]);
+export type EmailTemplate = typeof emailTemplates.$inferSelect;
+export type InsertEmailTemplate = typeof emailTemplates.$inferInsert;
+
+// ── Email Events (audit log) ──────────────────────────────────────────────────
+export const emailEvents = mysqlTable("email_events", {
+  id:             int("id").autoincrement().primaryKey(),
+  messageId:      varchar("messageId", { length: 255 }).notNull(),
+  recipientEmail: varchar("recipientEmail", { length: 320 }).notNull(),
+  tenantId:       int("tenantId").notNull(),
+  templateKey:    varchar("templateKey", { length: 100 }).notNull(),
+  eventType:      mysqlEnum("eventType", ["sent", "delivered", "bounce", "complaint", "open", "click"]).notNull(),
+  bounceType:     varchar("bounceType", { length: 50 }),
+  diagnosticCode: text("diagnosticCode"),
+  timestamp:      timestamp("timestamp").defaultNow().notNull(),
+}, (t) => [
+  index("ee_tenantId_idx").on(t.tenantId),
+  index("ee_recipient_idx").on(t.recipientEmail),
+  index("ee_messageId_idx").on(t.messageId),
+]);
+export type EmailEvent = typeof emailEvents.$inferSelect;
+export type InsertEmailEvent = typeof emailEvents.$inferInsert;
+
+// ── User Email Preferences ────────────────────────────────────────────────────
+export const userEmailPreferences = mysqlTable("user_email_preferences", {
+  id:                   int("id").autoincrement().primaryKey(),
+  userId:               int("userId").notNull().unique(),
+  invalidEmail:         boolean("invalidEmail").default(false).notNull(),
+  marketingDisabled:    boolean("marketingDisabled").default(false).notNull(),
+  lastEngagementAt:     timestamp("lastEngagementAt"),
+  sunsetWarningSentAt:  timestamp("sunsetWarningSentAt"),
+  softBounceCount:      int("softBounceCount").default(0).notNull(),
+  updatedAt:            timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => [
+  index("uep_userId_idx").on(t.userId),
+]);
+export type UserEmailPreference = typeof userEmailPreferences.$inferSelect;
+export type InsertUserEmailPreference = typeof userEmailPreferences.$inferInsert;

@@ -4,6 +4,7 @@ import { router, tenantAdminProcedure, protectedProcedure } from "../_core/trpc"
 import { getDb } from "../db";
 import { rounds, competitions, competitionEntrants, users, roundReminders } from "../../drizzle/schema";
 import { notifyOwner } from "../_core/notification";
+import { EmailService } from "../services/emailService";
 
 export const roundsRouter = router({
   // List rounds for a competition
@@ -172,6 +173,25 @@ export const roundsRouter = router({
           participantList + moreCount,
         ].join("\n"),
       }).catch(() => { /* non-fatal */ });
+
+      // Send per-entrant reminder emails (non-fatal — fire and forget)
+      for (const entrant of entrantRows) {
+        if (entrant.userEmail) {
+          EmailService.sendEmail({
+            to: entrant.userEmail,
+            templateKey: "entrant_tips_closing_24h",
+            tenantId: comp.tenantId,
+            placeholders: {
+              user_name: entrant.userName ?? entrant.userEmail,
+              competition_name: comp.name,
+              round_number: round.roundNumber,
+              round_close_time: deadline,
+              games_list: "See the platform for this round's fixtures.",
+              tips_url: `/comp/${comp.id}`,
+            },
+          }).catch(() => { /* non-fatal */ });
+        }
+      }
 
       // Log the reminder send in the database
       await db.insert(roundReminders).values({

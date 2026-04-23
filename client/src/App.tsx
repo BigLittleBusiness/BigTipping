@@ -32,6 +32,7 @@ import TenantDashboard from "./pages/tenant/Dashboard";
 import TenantCompetitions from "./pages/tenant/Competitions";
 import CompetitionDetail from "./pages/tenant/CompetitionDetail";
 import RoundResults from "./pages/tenant/RoundResults";
+import EmailSettings from "./pages/tenant/EmailSettings";
 
 // Entrant pages
 import MyCompetitions from "./pages/entrant/MyCompetitions";
@@ -96,6 +97,7 @@ function Router() {
       <Route path="/tenant/competitions" component={TenantCompetitions} />
       <Route path="/tenant/competitions/:id" component={CompetitionDetail} />
       <Route path="/tenant/competitions/:compId/results/:roundId" component={RoundResults} />
+      <Route path="/tenant/email-settings" component={EmailSettings} />
 
       {/* Entrant */}
       <Route path="/my-competitions" component={MyCompetitions} />

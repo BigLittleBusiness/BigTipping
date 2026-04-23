@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import { router, publicProcedure, protectedProcedure } from "../_core/trpc.ts";
 import { tenantAdminProcedure } from "../_core/trpc.ts";
 import { getDb } from "../db.ts";
+import { EmailService } from "../services/emailService.ts";
 import {
   competitions,
   competitionEntrants,
@@ -164,6 +165,20 @@ export const invitesRouter = router({
         });
       } catch {
         // Already exists — fine
+      }
+
+      // Send join confirmation email (non-fatal — fire and forget)
+      if (ctx.user.email) {
+        EmailService.sendEmail({
+          to: ctx.user.email,
+          templateKey: "entrant_join_confirmation",
+          tenantId: comp.tenantId,
+          placeholders: {
+            user_name: ctx.user.name ?? ctx.user.email,
+            competition_name: comp.name,
+            tips_url: `/comp/${comp.id}`,
+          },
+        }).catch(() => { /* non-fatal */ });
       }
 
       return { competitionId: comp.id, competitionName: comp.name };
