@@ -210,3 +210,18 @@ export const competitionEntrants = mysqlTable("competition_entrants", {
 
 export type CompetitionEntrant = typeof competitionEntrants.$inferSelect;
 export type InsertCompetitionEntrant = typeof competitionEntrants.$inferInsert;
+
+// ── Enquiries (contact / book-a-demo form) ───────────────────────────────────
+export const enquiries = mysqlTable("enquiries", {
+  id:                int("id").autoincrement().primaryKey(),
+  name:              varchar("name", { length: 200 }).notNull(),
+  email:             varchar("email", { length: 320 }).notNull(),
+  business:          varchar("business", { length: 300 }).notNull(),
+  businessType:      varchar("businessType", { length: 100 }).notNull(),
+  estimatedEntrants: varchar("estimatedEntrants", { length: 50 }),
+  message:           text("message"),
+  createdAt:         timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Enquiry = typeof enquiries.$inferSelect;
+export type InsertEnquiry = typeof enquiries.$inferInsert;

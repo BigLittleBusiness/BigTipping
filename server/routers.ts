@@ -2,16 +2,17 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
-import { tenantsRouter } from "./routers/tenants";
-import { sportsRouter } from "./routers/sports";
-import { competitionsRouter } from "./routers/competitions";
-import { roundsRouter } from "./routers/rounds";
-import { fixturesRouter } from "./routers/fixtures";
-import { tipsRouter } from "./routers/tips";
-import { leaderboardRouter } from "./routers/leaderboard";
-import { prizesRouter } from "./routers/prizes";
-import { statsRouter } from "./routers/stats";
-import { seedRouter } from "./routers/seed";
+import { tenantsRouter } from "./routers/tenants.ts";
+import { sportsRouter } from "./routers/sports.ts";
+import { competitionsRouter } from "./routers/competitions.ts";
+import { roundsRouter } from "./routers/rounds.ts";
+import { fixturesRouter } from "./routers/fixtures.ts";
+import { tipsRouter } from "./routers/tips.ts";
+import { leaderboardRouter } from "./routers/leaderboard.ts";
+import { prizesRouter } from "./routers/prizes.ts";
+import { statsRouter } from "./routers/stats.ts";
+import { seedRouter } from "./routers/seed.ts";
+import { contactRouter } from "./routers/contact.ts";
 
 export const appRouter = router({
   system: systemRouter,
@@ -33,6 +34,7 @@ export const appRouter = router({
   prizes:       prizesRouter,
   stats:        statsRouter,
   seed:         seedRouter,
+  contact:      contactRouter,
 });
 
 export type AppRouter = typeof appRouter;

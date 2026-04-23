@@ -70,3 +70,14 @@
 - [x] Tenant isolation tests
 - [x] TypeScript: 0 errors
 - [x] Final checkpoint saved
+
+## Phase 10: Marketing Website Redesign (Multi-Page, Benefit-Driven)
+- [x] Redesign Home page: benefit-driven hero, segment cards, how-it-works, social proof, CTA
+- [x] Build Why Tipping? page: business case for tipping competitions
+- [x] Build How It Works page: 5-step setup visual walkthrough
+- [x] Build Use Cases page: 6 business segments (Pubs, Corporate, Clubs, Media, Retail, Fitness)
+- [x] Build Features page: platform capabilities from business owner perspective
+- [x] Build Pricing page: 3-tier pricing (Starter/Growth/Pro) with FAQ and free trial CTA
+- [x] Build Contact / Book a Demo page: lead capture form with business type and audience size
+- [x] Update App.tsx routing for all new marketing pages
+- [x] Shared MarketingLayout component with nav (mobile-responsive) and footer

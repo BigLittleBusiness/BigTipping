@@ -9,6 +9,14 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import CompetitionLanding from "./pages/CompetitionLanding";
 
+// Marketing pages
+import WhyTipping from "./pages/marketing/WhyTipping";
+import HowItWorks from "./pages/marketing/HowItWorks";
+import UseCases from "./pages/marketing/UseCases";
+import Features from "./pages/marketing/Features";
+import Pricing from "./pages/marketing/Pricing";
+import Contact from "./pages/marketing/Contact";
+
 // System Admin pages
 import AdminOverview from "./pages/admin/Overview";
 import AdminTenants from "./pages/admin/Tenants";
@@ -29,6 +37,14 @@ function Router() {
       {/* Public */}
       <Route path="/" component={Home} />
       <Route path="/join/:id" component={CompetitionLanding} />
+
+      {/* Marketing */}
+      <Route path="/why-tipping" component={WhyTipping} />
+      <Route path="/how-it-works" component={HowItWorks} />
+      <Route path="/use-cases" component={UseCases} />
+      <Route path="/features" component={Features} />
+      <Route path="/pricing" component={Pricing} />
+      <Route path="/contact" component={Contact} />
 
       {/* System Admin */}
       <Route path="/admin/overview" component={AdminOverview} />
