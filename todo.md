@@ -81,3 +81,6 @@
 - [x] Build Contact / Book a Demo page: lead capture form with business type and audience size
 - [x] Update App.tsx routing for all new marketing pages
 - [x] Shared MarketingLayout component with nav (mobile-responsive) and footer
+
+## Phase 11: Mobile Navigation
+- [x] Add responsive hamburger menu to MarketingLayout nav (slide-out drawer, all nav links, CTA button, close on route change)
