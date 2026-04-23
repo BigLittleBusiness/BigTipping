@@ -10,7 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trophy, Medal, CheckCircle2, XCircle, Loader2, Download, Bell, Clock } from "lucide-react";
+import { Plus, Trophy, Medal, CheckCircle2, XCircle, Loader2, Download, Bell, Clock, ClipboardList } from "lucide-react";
+import { useLocation } from "wouter";
 import InviteLinkPanel from "@/components/InviteLinkPanel";
 
 /** Client-side CSV export — no server round-trip needed */
@@ -45,6 +46,7 @@ const RANK_BADGE: Record<number, { label: string; cls: string }> = {
 export default function CompetitionDetail() {
   const params = useParams<{ id: string }>();
   const compId = Number(params.id);
+  const [, navigate] = useLocation();
 
   const { data: comp } = trpc.competitions.get.useQuery({ id: compId });
   const { data: rounds, refetch: refetchRounds } = trpc.rounds.list.useQuery({ competitionId: compId });
@@ -175,6 +177,16 @@ export default function CompetitionDetail() {
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => setRoundStatus.mutate({ id: round.id, status: "closed" })}>Close Tips</Button>
                         </>
+                      )}
+                      {(round.status === "closed" || round.status === "open") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1"
+                          onClick={() => navigate(`/tenant/competitions/${compId}/results/${round.id}`)}
+                        >
+                          <ClipboardList size={12} /> Enter Results
+                        </Button>
                       )}
                       {round.status === "closed" && (
                         <Button size="sm" onClick={() => scoreRound.mutate({ roundId: round.id, competitionId: compId })} disabled={scoreRound.isPending}>

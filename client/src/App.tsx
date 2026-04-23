@@ -31,6 +31,7 @@ import AdminSports from "./pages/admin/Sports";
 import TenantDashboard from "./pages/tenant/Dashboard";
 import TenantCompetitions from "./pages/tenant/Competitions";
 import CompetitionDetail from "./pages/tenant/CompetitionDetail";
+import RoundResults from "./pages/tenant/RoundResults";
 
 // Entrant pages
 import MyCompetitions from "./pages/entrant/MyCompetitions";
@@ -94,6 +95,7 @@ function Router() {
       <Route path="/tenant/dashboard" component={TenantDashboard} />
       <Route path="/tenant/competitions" component={TenantCompetitions} />
       <Route path="/tenant/competitions/:id" component={CompetitionDetail} />
+      <Route path="/tenant/competitions/:compId/results/:roundId" component={RoundResults} />
 
       {/* Entrant */}
       <Route path="/my-competitions" component={MyCompetitions} />

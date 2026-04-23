@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 import { router, entrantProcedure } from "../_core/trpc";
 import { getDb } from "../db";
-import { tips, fixtures, teams } from "../../drizzle/schema";
+import { tips, fixtures, teams, rounds } from "../../drizzle/schema";
 
 export const tipsRouter = router({
   // Submit or update a tip
@@ -15,6 +16,30 @@ export const tipsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
+
+      // ── Server-side lock-out: verify round is open and deadline hasn't passed ──
+      const [fixture] = await db.select().from(fixtures).where(eq(fixtures.id, input.fixtureId)).limit(1);
+      if (!fixture) throw new TRPCError({ code: "NOT_FOUND", message: "Fixture not found" });
+
+      const [round] = await db.select().from(rounds).where(eq(rounds.id, fixture.roundId)).limit(1);
+      if (!round) throw new TRPCError({ code: "NOT_FOUND", message: "Round not found" });
+
+      if (round.status !== "open") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: round.status === "upcoming"
+            ? "Tipping has not opened yet for this round."
+            : "Tipping is closed for this round.",
+        });
+      }
+
+      if (round.tipsCloseAt && new Date() > new Date(round.tipsCloseAt)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "The tipping deadline for this round has passed.",
+        });
+      }
+
       await db.insert(tips).values({
         userId: ctx.user.id,
         fixtureId: input.fixtureId,

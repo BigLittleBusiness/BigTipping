@@ -110,3 +110,11 @@
 - [x] Item 1: Add Download CSV button to admin Entrants tab (client-side CSV generation, name/email/join date/status)
 - [x] Item 2: Build sendRoundReminder tRPC mutation (tipsCloseAt already in schema); Send Reminder button on open rounds; Set Deadline dialog; setDeadline mutation
 - [x] Item 3: Deadline banner on entrant tip submission screen — blue info banner normally, orange urgent banner when <24h remaining
+
+## Phase 15: Result Entry & Tip Lock-out
+- [ ] Fixture result entry screen: enterResults mutation (mark winner per fixture, trigger scoring)
+- [ ] Fixture result entry screen: RoundResults admin UI page with per-fixture winner selector
+- [ ] Fixture result entry screen: link from CompetitionDetail rounds tab to result entry
+- [ ] Tip lock-out: server-side deadline check in submitTip procedure
+- [ ] Tip lock-out: visual locked state on entrant tip cards (lock icon, greyed out, "Tips Closed" badge)
+- [ ] Tests for result entry and lock-out logic

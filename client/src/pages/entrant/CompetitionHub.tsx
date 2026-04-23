@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Trophy, CheckCircle2, XCircle, Circle, ChevronLeft, Flame, Clock, AlertCircle } from "lucide-react";
+import { Trophy, CheckCircle2, XCircle, Circle, ChevronLeft, Flame, Clock, AlertCircle, Lock } from "lucide-react";
 import { Link } from "wouter";
 
 const RANK_BADGE: Record<number, { label: string; cls: string }> = {
@@ -110,14 +110,30 @@ export default function CompetitionHub() {
             {/* Deadline banner */}
             {(() => {
               const activeRound = allRounds?.find(r => r.id === activeRoundId);
-              if (!activeRound?.tipsCloseAt) return null;
-              const deadline = new Date(activeRound.tipsCloseAt);
+              if (!activeRound) return null;
+              const deadline = activeRound.tipsCloseAt ? new Date(activeRound.tipsCloseAt) : null;
               const now = new Date();
+              const deadlinePassed = deadline ? now > deadline : false;
+              const roundClosed = activeRound.status !== "open";
+              // Locked banner — shown when deadline has passed or round is not open
+              if (deadlinePassed || roundClosed) {
+                const reason = activeRound.status === "upcoming"
+                  ? "Tipping has not opened yet for this round."
+                  : deadlinePassed
+                  ? `The tipping deadline passed on ${deadline!.toLocaleString("en-AU", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.`
+                  : "Tipping is closed for this round.";
+                return (
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-lg border bg-muted/60 border-border text-sm font-medium text-muted-foreground">
+                    <Lock size={16} className="shrink-0" />
+                    <span>{reason}</span>
+                  </div>
+                );
+              }
+              // Open — show deadline countdown
+              if (!deadline) return null;
               const msLeft = deadline.getTime() - now.getTime();
               const hoursLeft = msLeft / (1000 * 60 * 60);
-              const isUrgent = hoursLeft > 0 && hoursLeft < 24;
-              const isPast = msLeft <= 0;
-              if (isPast) return null; // round already closed, no need to show
+              const isUrgent = hoursLeft < 24;
               return (
                 <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-sm font-medium ${
                   isUrgent
@@ -179,19 +195,31 @@ export default function CompetitionHub() {
             ) : (
               <div className="space-y-3">
                 {roundTips.map(({ fixture, tip, pickedTeam }) => {
-                  const isOpen = allRounds?.find(r => r.id === activeRoundId)?.status === "open";
+                  const activeRound = allRounds?.find(r => r.id === activeRoundId);
+                  const isOpen = activeRound?.status === "open";
+                  const deadline = activeRound?.tipsCloseAt ? new Date(activeRound.tipsCloseAt) : null;
+                  const deadlinePassed = deadline ? new Date() > deadline : false;
+                  // A tip is locked if the round is not open OR the deadline has passed
+                  const isLocked = !isOpen || deadlinePassed;
                   const isScored = fixture.status === "completed";
                   return (
-                    <Card key={fixture.id} className={
+                    <Card key={fixture.id} className={[
                       tip?.isCorrect === true ? "border-green-300 bg-green-50/30" :
-                      tip?.isCorrect === false ? "border-red-300 bg-red-50/30" : ""
-                    }>
+                      tip?.isCorrect === false ? "border-red-300 bg-red-50/30" : "",
+                      isLocked && !isScored ? "opacity-75" : "",
+                    ].join(" ")}>
                       <CardContent className="py-4">
                         <div className="flex items-center gap-2 mb-3">
                           {tip?.isCorrect === true && <CheckCircle2 size={16} className="text-green-600" />}
                           {tip?.isCorrect === false && <XCircle size={16} className="text-red-500" />}
                           {tip?.isCorrect === null && tip && <Circle size={16} className="text-muted-foreground" />}
                           <span className="text-xs text-muted-foreground">{fixture.venue ?? ""}</span>
+                          {/* Locked indicator on the card */}
+                          {isLocked && !isScored && (
+                            <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+                              <Lock size={11} /> Locked
+                            </span>
+                          )}
                           {isScored && fixture.winner && (
                             <span className="text-xs text-green-600 font-semibold ml-auto">
                               Result: {fixture.winner.name} ({fixture.homeScore}–{fixture.awayScore})
@@ -204,8 +232,11 @@ export default function CompetitionHub() {
                             team={fixture.homeTeam}
                             selected={tip?.pickedTeamId === fixture.homeTeamId}
                             correct={isScored ? fixture.winnerId === fixture.homeTeamId : undefined}
-                            disabled={!isOpen}
-                            onClick={() => isOpen && submitTip.mutate({ fixtureId: fixture.id, competitionId: compId, pickedTeamId: fixture.homeTeamId })}
+                            disabled={isLocked}
+                            onClick={() => {
+                              if (isLocked) { toast.error(deadlinePassed ? "The tipping deadline has passed." : "Tipping is closed for this round."); return; }
+                              submitTip.mutate({ fixtureId: fixture.id, competitionId: compId, pickedTeamId: fixture.homeTeamId });
+                            }}
                           />
                           <span className="text-xs font-bold text-muted-foreground shrink-0">VS</span>
                           {/* Away team */}
@@ -213,8 +244,11 @@ export default function CompetitionHub() {
                             team={fixture.awayTeam}
                             selected={tip?.pickedTeamId === fixture.awayTeamId}
                             correct={isScored ? fixture.winnerId === fixture.awayTeamId : undefined}
-                            disabled={!isOpen}
-                            onClick={() => isOpen && submitTip.mutate({ fixtureId: fixture.id, competitionId: compId, pickedTeamId: fixture.awayTeamId })}
+                            disabled={isLocked}
+                            onClick={() => {
+                              if (isLocked) { toast.error(deadlinePassed ? "The tipping deadline has passed." : "Tipping is closed for this round."); return; }
+                              submitTip.mutate({ fixtureId: fixture.id, competitionId: compId, pickedTeamId: fixture.awayTeamId });
+                            }}
                           />
                         </div>
                       </CardContent>
