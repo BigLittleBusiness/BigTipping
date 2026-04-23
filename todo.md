@@ -84,3 +84,17 @@
 
 ## Phase 11: Mobile Navigation
 - [x] Add responsive hamburger menu to MarketingLayout nav (slide-out drawer, all nav links, CTA button, close on route change)
+
+## Phase 12: Copy Invite Link Feature
+- [x] Add inviteToken + inviteEnabled columns to competitions table in Drizzle schema
+- [x] Generate and apply migration for inviteToken + inviteEnabled
+- [x] Build invites tRPC router (generateLink, toggleLink, getByToken, joinViaInvite)
+- [x] Build public /join/:token page (competition details, login/join CTA, auto-join on auth)
+- [x] Add InviteLinkPanel (compact mode) to Competitions list page
+- [x] Add InviteLinkPanel (full mode) + Invite tab to CompetitionDetail page (copy, toggle, regenerate)
+- [x] Wire join flow: after login, auto-enrol entrant into competition via sessionStorage token
+- [x] Write Vitest tests for invite logic (14 tests — 33 total passing)
+
+## Phase 12b: Invite Link — Gap Resolution
+- [x] Implement post-login invite continuation: PendingInviteHandler in App.tsx reads pendingInviteToken after OAuth returns and auto-joins
+- [x] Add Vitest coverage for invite state logic (disabled links, completed competitions, token validation, URL construction — 14 tests)

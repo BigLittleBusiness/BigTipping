@@ -22,6 +22,13 @@
       "when": 1776913463808,
       "tag": "0002_optimal_hercules",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1776934131433,
+      "tag": "0003_powerful_misty_knight",
+      "breakpoints": true
     }
   ]
 }

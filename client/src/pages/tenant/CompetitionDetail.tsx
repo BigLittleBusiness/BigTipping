@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Trophy, Medal, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import InviteLinkPanel from "@/components/InviteLinkPanel";
 
 const RANK_BADGE: Record<number, { label: string; cls: string }> = {
   1: { label: "Gold",   cls: "bg-yellow-100 text-yellow-700 border border-yellow-300" },
@@ -70,6 +71,7 @@ export default function CompetitionDetail() {
             <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
             <TabsTrigger value="prizes">Prizes</TabsTrigger>
             <TabsTrigger value="entrants">Entrants ({entrants?.length ?? 0})</TabsTrigger>
+            <TabsTrigger value="invite">Invite Link</TabsTrigger>
           </TabsList>
 
           {/* ── ROUNDS TAB ─────────────────────────────────────────── */}
@@ -344,6 +346,49 @@ export default function CompetitionDetail() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ── INVITE LINK TAB ────────────────────────────────────── */}
+          <TabsContent value="invite" className="mt-4">
+            <div className="max-w-xl space-y-4">
+              <div>
+                <h2 className="font-heading font-semibold text-gray-900 mb-1">Share Your Competition</h2>
+                <p className="text-sm text-gray-500">
+                  Generate a unique invite link and share it via email, social media, or your website.
+                  Anyone who clicks the link can sign in and join this competition instantly.
+                </p>
+              </div>
+              {comp && (
+                <InviteLinkPanel
+                  competitionId={compId}
+                  competitionName={comp.name}
+                  initialToken={(comp as any).inviteToken ?? null}
+                  initialEnabled={(comp as any).inviteEnabled ?? false}
+                />
+              )}
+              {/* Tips for sharing */}
+              <div className="bg-[#2B4EAE]/5 border border-[#2B4EAE]/15 rounded-xl p-4">
+                <h3 className="font-semibold text-[#2B4EAE] text-sm mb-2">Tips for sharing</h3>
+                <ul className="space-y-1.5 text-sm text-gray-600">
+                  <li className="flex items-start gap-2">
+                    <span className="text-[#C8521A] font-bold mt-0.5">·</span>
+                    Paste the link into your weekly email newsletter for maximum reach
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[#C8521A] font-bold mt-0.5">·</span>
+                    Post it on your social channels with a prize teaser to drive sign-ups
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[#C8521A] font-bold mt-0.5">·</span>
+                    Add it to your website or digital menu so walk-in customers can join
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[#C8521A] font-bold mt-0.5">·</span>
+                    Disable the link at any time to stop new entries without affecting existing ones
+                  </li>
+                </ul>
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Plus, Trophy, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
+import InviteLinkPanel from "@/components/InviteLinkPanel";
 
 const STATUS_SEQUENCE = ["draft", "active", "round-by-round", "completed"] as const;
 type CompStatus = typeof STATUS_SEQUENCE[number];
@@ -116,6 +117,15 @@ export default function TenantCompetitions() {
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">{c.season ?? "No season"}</p>
+                        <div className="mt-2">
+                          <InviteLinkPanel
+                            competitionId={c.id}
+                            competitionName={c.name}
+                            initialToken={(c as any).inviteToken ?? null}
+                            initialEnabled={(c as any).inviteEnabled ?? false}
+                            compact
+                          />
+                        </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {next && (

@@ -86,12 +86,15 @@ export const competitions = mysqlTable("competitions", {
   }>(),
   startDate:   timestamp("startDate"),
   endDate:     timestamp("endDate"),
-  isPublic:    boolean("isPublic").default(true).notNull(),
-  createdAt:   timestamp("createdAt").defaultNow().notNull(),
-  updatedAt:   timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  isPublic:     boolean("isPublic").default(true).notNull(),
+  inviteToken:  varchar("inviteToken", { length: 64 }).unique(),
+  inviteEnabled: boolean("inviteEnabled").default(true).notNull(),
+  createdAt:    timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:    timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => [
   index("competitions_tenantId_idx").on(t.tenantId),
   index("competitions_sportId_idx").on(t.sportId),
+  uniqueIndex("competitions_inviteToken_idx").on(t.inviteToken),
 ]);
 
 export type Competition = typeof competitions.$inferSelect;
