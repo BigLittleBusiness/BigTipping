@@ -105,3 +105,8 @@
 - [x] Update CompetitionDetail leaderboard tab — already used entry.user?.name correctly
 - [x] Update entrant CompetitionHub leaderboard — already used entry.user?.name correctly
 - [x] Update listEntrants query to JOIN users table and return userName + userEmail; Entrants tab redesigned with avatar initials, name, email, join date, status
+
+## Phase 14: Three Feature Additions
+- [x] Item 1: Add Download CSV button to admin Entrants tab (client-side CSV generation, name/email/join date/status)
+- [x] Item 2: Build sendRoundReminder tRPC mutation (tipsCloseAt already in schema); Send Reminder button on open rounds; Set Deadline dialog; setDeadline mutation
+- [x] Item 3: Deadline banner on entrant tip submission screen — blue info banner normally, orange urgent banner when <24h remaining

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Trophy, CheckCircle2, XCircle, Circle, ChevronLeft, Flame } from "lucide-react";
+import { Trophy, CheckCircle2, XCircle, Circle, ChevronLeft, Flame, Clock, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
 
 const RANK_BADGE: Record<number, { label: string; cls: string }> = {
@@ -105,10 +105,47 @@ export default function CompetitionHub() {
             <TabsTrigger value="prizes" className="flex-1">Prizes</TabsTrigger>
           </TabsList>
 
-          {/* ── TIPS TAB ───────────────────────────────────────────── */}
+          {/* ── TIPS TAB ─────────────────────────────────────────────── */}
           <TabsContent value="tips" className="mt-4 space-y-4">
-            {/* Round selector */}
-            {allRounds && allRounds.length > 0 && (
+            {/* Deadline banner */}
+            {(() => {
+              const activeRound = allRounds?.find(r => r.id === activeRoundId);
+              if (!activeRound?.tipsCloseAt) return null;
+              const deadline = new Date(activeRound.tipsCloseAt);
+              const now = new Date();
+              const msLeft = deadline.getTime() - now.getTime();
+              const hoursLeft = msLeft / (1000 * 60 * 60);
+              const isUrgent = hoursLeft > 0 && hoursLeft < 24;
+              const isPast = msLeft <= 0;
+              if (isPast) return null; // round already closed, no need to show
+              return (
+                <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-sm font-medium ${
+                  isUrgent
+                    ? "bg-orange-50 border-orange-200 text-orange-800"
+                    : "bg-blue-50 border-blue-200 text-blue-800"
+                }`}>
+                  {isUrgent ? <AlertCircle size={16} className="shrink-0" /> : <Clock size={16} className="shrink-0" />}
+                  <div>
+                    <span className="font-semibold">Tips close </span>
+                    <span>
+                      {deadline.toLocaleString("en-AU", {
+                        weekday: "long",
+                        day: "numeric",
+                        month: "long",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                    {isUrgent && (
+                      <span className="ml-2 text-orange-600 font-bold">
+                        ({Math.ceil(hoursLeft)}h left!)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+            {/* Round selector */}           {allRounds && allRounds.length > 0 && (
               <div className="flex gap-2 flex-wrap">
                 {allRounds.map(r => (
                   <button

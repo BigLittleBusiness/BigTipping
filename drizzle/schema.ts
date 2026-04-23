@@ -228,3 +228,18 @@ export const enquiries = mysqlTable("enquiries", {
 
 export type Enquiry = typeof enquiries.$inferSelect;
 export type InsertEnquiry = typeof enquiries.$inferInsert;
+
+// ── Round Reminders (log of reminder sends) ───────────────────────────────────
+export const roundReminders = mysqlTable("round_reminders", {
+  id:            int("id").autoincrement().primaryKey(),
+  roundId:       int("roundId").notNull(),
+  competitionId: int("competitionId").notNull(),
+  sentAt:        timestamp("sentAt").defaultNow().notNull(),
+  recipientCount: int("recipientCount").notNull().default(0),
+  sentByUserId:  int("sentByUserId").notNull(),
+}, (t) => [
+  index("rr_roundId_idx").on(t.roundId),
+]);
+
+export type RoundReminder = typeof roundReminders.$inferSelect;
+export type InsertRoundReminder = typeof roundReminders.$inferInsert;

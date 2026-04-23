@@ -10,8 +10,31 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trophy, Medal, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Plus, Trophy, Medal, CheckCircle2, XCircle, Loader2, Download, Bell, Clock } from "lucide-react";
 import InviteLinkPanel from "@/components/InviteLinkPanel";
+
+/** Client-side CSV export — no server round-trip needed */
+function downloadEntrantsCSV(
+  entrants: Array<{ userName: string | null; userEmail: string | null; joinedAt: Date | string; isActive: boolean }>,
+  competitionName: string
+) {
+  const header = ["#", "Name", "Email", "Joined", "Status"];
+  const rows = entrants.map((e, i) => [
+    String(i + 1),
+    e.userName ?? "Unknown",
+    e.userEmail ?? "",
+    new Date(e.joinedAt).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }),
+    e.isActive ? "Active" : "Inactive",
+  ]);
+  const csv = [header, ...rows].map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${competitionName.replace(/[^a-z0-9]/gi, "_")}_entrants.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 const RANK_BADGE: Record<number, { label: string; cls: string }> = {
   1: { label: "Gold",   cls: "bg-yellow-100 text-yellow-700 border border-yellow-300" },
@@ -31,8 +54,15 @@ export default function CompetitionDetail() {
 
   const createRound = trpc.rounds.create.useMutation({ onSuccess: () => { refetchRounds(); setRoundOpen(false); toast.success("Round created"); } });
   const setRoundStatus = trpc.rounds.setStatus.useMutation({ onSuccess: () => { refetchRounds(); toast.success("Round updated"); } });
+  const setDeadline = trpc.rounds.setDeadline.useMutation({ onSuccess: () => { refetchRounds(); toast.success("Deadline saved"); } });
+  const sendReminder = trpc.rounds.sendRoundReminder.useMutation({
+    onSuccess: (d) => toast.success(d.message),
+    onError: () => toast.error("Failed to send reminder"),
+  });
   const scoreRound = trpc.leaderboard.scoreRound.useMutation({ onSuccess: (d) => { refetchRounds(); toast.success(`Scored ${d.scored} tips`); } });
   const createPrize = trpc.prizes.create.useMutation({ onSuccess: () => { refetchPrizes(); setPrizeOpen(false); toast.success("Prize added"); } });
+  const [deadlineRoundId, setDeadlineRoundId] = useState<number | null>(null);
+  const [deadlineValue, setDeadlineValue] = useState("");
 
   const [roundOpen, setRoundOpen] = useState(false);
   const [prizeOpen, setPrizeOpen] = useState(false);
@@ -104,9 +134,25 @@ export default function CompetitionDetail() {
               <Card key={round.id} className={selectedRoundId === round.id ? "ring-2 ring-primary" : ""}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
-                      <CardTitle className="text-base">{round.name ?? `Round ${round.roundNumber}`}</CardTitle>
-                      <RoundStatusBadge status={round.status} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <CardTitle className="text-base">{round.name ?? `Round ${round.roundNumber}`}</CardTitle>
+                        <RoundStatusBadge status={round.status} />
+                      </div>
+                      {/* Deadline display */}
+                      {round.tipsCloseAt ? (
+                        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                          <Clock size={11} />
+                          Tips close {new Date(round.tipsCloseAt).toLocaleString("en-AU", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      ) : (
+                        <button
+                          className="text-xs text-muted-foreground mt-1 hover:text-primary underline underline-offset-2 flex items-center gap-1"
+                          onClick={() => { setDeadlineRoundId(round.id); setDeadlineValue(""); }}
+                        >
+                          <Clock size={11} /> Set tipping deadline
+                        </button>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <Button variant="outline" size="sm" onClick={() => setSelectedRoundId(round.id === selectedRoundId ? null : round.id)}>
@@ -116,7 +162,19 @@ export default function CompetitionDetail() {
                         <Button size="sm" variant="outline" onClick={() => setRoundStatus.mutate({ id: round.id, status: "open" })}>Open Tips</Button>
                       )}
                       {round.status === "open" && (
-                        <Button size="sm" variant="outline" onClick={() => setRoundStatus.mutate({ id: round.id, status: "closed" })}>Close Tips</Button>
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1"
+                            disabled={sendReminder.isPending}
+                            onClick={() => sendReminder.mutate({ roundId: round.id, competitionId: compId })}
+                          >
+                            {sendReminder.isPending ? <Loader2 size={12} className="animate-spin" /> : <Bell size={12} />}
+                            Send Reminder
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setRoundStatus.mutate({ id: round.id, status: "closed" })}>Close Tips</Button>
+                        </>
                       )}
                       {round.status === "closed" && (
                         <Button size="sm" onClick={() => scoreRound.mutate({ roundId: round.id, competitionId: compId })} disabled={scoreRound.isPending}>
@@ -208,11 +266,42 @@ export default function CompetitionDetail() {
                   </CardContent>
                 )}
               </Card>
-            ))}
-          </TabsContent>
+            ))}          </TabsContent>
 
-          {/* ── LEADERBOARD TAB ────────────────────────────────────── */}
-          <TabsContent value="leaderboard" className="mt-4">
+          {/* ── SET DEADLINE DIALOG (outside tabs so it can overlay) ── */}
+          <Dialog open={deadlineRoundId !== null} onOpenChange={open => { if (!open) setDeadlineRoundId(null); }}>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Set Tipping Deadline</DialogTitle></DialogHeader>
+              <div className="space-y-4 pt-2">
+                <p className="text-sm text-muted-foreground">Choose when tips will close for this round. Participants will see this deadline on their tip submission screen.</p>
+                <div className="space-y-1">
+                  <Label>Close Date &amp; Time</Label>
+                  <Input
+                    type="datetime-local"
+                    value={deadlineValue}
+                    onChange={e => setDeadlineValue(e.target.value)}
+                  />
+                </div>
+                <Button
+                  className="w-full"
+                  disabled={!deadlineValue || setDeadline.isPending}
+                  onClick={() => {
+                    if (deadlineRoundId && deadlineValue) {
+                      setDeadline.mutate(
+                        { id: deadlineRoundId, tipsCloseAt: new Date(deadlineValue).toISOString() },
+                        { onSuccess: () => setDeadlineRoundId(null) }
+                      );
+                    }
+                  }}
+                >
+                  {setDeadline.isPending ? <Loader2 size={14} className="animate-spin mr-2" /> : null}
+                  Save Deadline
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* ── LEADERBOARD TAB ───────────────────────────────────────── */}         <TabsContent value="leaderboard" className="mt-4">
             <Card>
               <CardContent className="p-0">
                 {!leaderboard?.length ? (
@@ -315,7 +404,21 @@ export default function CompetitionDetail() {
           </TabsContent>
 
           {/* ── ENTRANTS TAB ───────────────────────────────────────── */}
-          <TabsContent value="entrants" className="mt-4">
+          <TabsContent value="entrants" className="mt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">{entrants?.length ?? 0} participant{(entrants?.length ?? 0) !== 1 ? "s" : ""} enrolled</p>
+              {entrants && entrants.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => downloadEntrantsCSV(entrants, comp?.name ?? "competition")}
+                >
+                  <Download size={14} />
+                  Download CSV
+                </Button>
+              )}
+            </div>
             <Card>
               <CardContent className="p-0">
                 {!entrants?.length ? (
