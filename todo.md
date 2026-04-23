@@ -98,3 +98,10 @@
 ## Phase 12b: Invite Link — Gap Resolution
 - [x] Implement post-login invite continuation: PendingInviteHandler in App.tsx reads pendingInviteToken after OAuth returns and auto-joins
 - [x] Add Vitest coverage for invite state logic (disabled links, completed competitions, token validation, URL construction — 14 tests)
+
+## Phase 13: Leaderboard Name Display
+- [x] Join users table in leaderboard query to return participant names instead of user IDs
+- [x] Update leaderboard router already returns user.name via userMap join
+- [x] Update CompetitionDetail leaderboard tab — already used entry.user?.name correctly
+- [x] Update entrant CompetitionHub leaderboard — already used entry.user?.name correctly
+- [x] Update listEntrants query to JOIN users table and return userName + userEmail; Entrants tab redesigned with avatar initials, name, email, join date, status

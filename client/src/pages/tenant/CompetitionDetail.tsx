@@ -319,21 +319,32 @@ export default function CompetitionDetail() {
             <Card>
               <CardContent className="p-0">
                 {!entrants?.length ? (
-                  <div className="text-center py-12 text-muted-foreground">No entrants yet.</div>
+                  <div className="text-center py-12 text-muted-foreground">No entrants yet. Share the invite link to get participants.</div>
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-muted/40">
-                        <th className="text-left px-4 py-3 font-semibold text-muted-foreground">User ID</th>
+                        <th className="text-left px-4 py-3 font-semibold text-muted-foreground">#</th>
+                        <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Participant</th>
+                        <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Email</th>
                         <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Joined</th>
                         <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {entrants.map(e => (
-                        <tr key={e.id} className="border-b border-border">
-                          <td className="px-4 py-3 font-mono text-xs">{e.userId}</td>
-                          <td className="px-4 py-3 text-muted-foreground text-xs">{new Date(e.joinedAt).toLocaleDateString()}</td>
+                      {entrants.map((e, idx) => (
+                        <tr key={e.id} className="border-b border-border hover:bg-muted/20 transition-colors">
+                          <td className="px-4 py-3 text-muted-foreground text-xs font-mono">{idx + 1}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs flex-shrink-0">
+                                {(e.userName ?? "?").charAt(0).toUpperCase()}
+                              </div>
+                              <span className="font-medium">{e.userName ?? "Unknown"}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground text-xs">{e.userEmail ?? "—"}</td>
+                          <td className="px-4 py-3 text-muted-foreground text-xs">{new Date(e.joinedAt).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })}</td>
                           <td className="px-4 py-3">
                             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${e.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
                               {e.isActive ? "Active" : "Inactive"}

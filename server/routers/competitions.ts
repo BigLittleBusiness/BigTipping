@@ -2,7 +2,7 @@ import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { router, tenantAdminProcedure, protectedProcedure, publicProcedure } from "../_core/trpc";
 import { getDb } from "../db";
-import { competitions, competitionEntrants, leaderboardEntries } from "../../drizzle/schema";
+import { competitions, competitionEntrants, leaderboardEntries, users } from "../../drizzle/schema";
 
 const LIFECYCLE = ["draft", "active", "round-by-round", "completed"] as const;
 
@@ -118,13 +118,25 @@ export const competitionsRouter = router({
     return all.filter(c => ids.includes(c.id));
   }),
 
-  // Tenant admin: list entrants for a competition
+  // Tenant admin: list entrants for a competition (with user details)
   listEntrants: tenantAdminProcedure
     .input(z.object({ competitionId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) return [];
-      return db.select().from(competitionEntrants)
+      const rows = await db
+        .select({
+          id: competitionEntrants.id,
+          userId: competitionEntrants.userId,
+          competitionId: competitionEntrants.competitionId,
+          joinedAt: competitionEntrants.joinedAt,
+          isActive: competitionEntrants.isActive,
+          userName: users.name,
+          userEmail: users.email,
+        })
+        .from(competitionEntrants)
+        .innerJoin(users, eq(competitionEntrants.userId, users.id))
         .where(eq(competitionEntrants.competitionId, input.competitionId));
+      return rows;
     }),
 });
