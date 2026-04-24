@@ -110,6 +110,7 @@ export const rounds = mysqlTable("rounds", {
   tipsOpenAt:      timestamp("tipsOpenAt"),
   tipsCloseAt:     timestamp("tipsCloseAt"),
   scoringCompleted: boolean("scoringCompleted").default(false).notNull(),
+  scoredAt:        timestamp("scoredAt"),
   createdAt:       timestamp("createdAt").defaultNow().notNull(),
   updatedAt:       timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => [
@@ -315,3 +316,20 @@ export const userEmailPreferences = mysqlTable("user_email_preferences", {
 ]);
 export type UserEmailPreference = typeof userEmailPreferences.$inferSelect;
 export type InsertUserEmailPreference = typeof userEmailPreferences.$inferInsert;
+// ── Scheduled Jobs (lightweight async job queue) ──────────────────────────────
+export const scheduledJobs = mysqlTable("scheduled_jobs", {
+  id:           int("id").autoincrement().primaryKey(),
+  jobType:      varchar("jobType", { length: 100 }).notNull(),
+  referenceId:  int("referenceId").notNull(),   // e.g. roundId
+  tenantId:     int("tenantId").notNull(),
+  scheduledAt:  timestamp("scheduledAt").notNull(),
+  completedAt:  timestamp("completedAt"),
+  status:       mysqlEnum("status", ["pending", "processing", "done", "failed"]).default("pending").notNull(),
+  payload:      text("payload"),                // JSON blob for extra context
+  createdAt:    timestamp("createdAt").defaultNow().notNull(),
+}, (t) => [
+  index("sj_status_scheduledAt_idx").on(t.status, t.scheduledAt),
+  index("sj_tenantId_idx").on(t.tenantId),
+]);
+export type ScheduledJob = typeof scheduledJobs.$inferSelect;
+export type InsertScheduledJob = typeof scheduledJobs.$inferInsert;

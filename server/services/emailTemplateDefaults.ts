@@ -94,7 +94,7 @@ export const EMAIL_TEMPLATE_DEFAULTS: TemplateDefault[] = [
     templateKey: "admin_weekly_digest",
     recipientRole: "admin",
     name: "Weekly Engagement Digest",
-    triggerDesc: "Sent every Monday at 9 AM local time",
+    triggerDesc: "Sent 24 hours after round scoring is completed, with real engagement stats",
     subject: "Big Tipping weekly digest – {{competition_name}}",
     bodyHtml: `
 <h2 style="margin:0 0 16px;color:#1f2937;">Your weekly digest</h2>
@@ -167,6 +167,22 @@ export const EMAIL_TEMPLATE_DEFAULTS: TemplateDefault[] = [
 <p style="color:#6b7280;font-size:14px;">{{games_list}}</p>
 <p style="margin-top:24px;">
   <a href="{{tips_url}}" class="btn">Submit My Tips Now</a>
+</p>`,
+  },
+
+  {
+    templateKey: "entrant_tips_closing_2h",
+    recipientRole: "entrant",
+    name: "Tips Closing Reminder (2 hours)",
+    triggerDesc: "Sent 2 hours before the first game of the round — only to entrants who have not yet submitted tips",
+    subject: "⚠️ Last chance! Round {{round_number}} tips close in 2 hours",
+    bodyHtml: `
+<h2 style="margin:0 0 16px;color:#C8521A;">⚠️ 2 hours left to submit your tips!</h2>
+<p>Hi {{user_name}},</p>
+<p>This is your final reminder — Round {{round_number}} of <strong>{{competition_name}}</strong> closes in approximately <strong>2 hours</strong>.</p>
+<p>You haven't submitted your tips yet. Don't miss out!</p>
+<p style="margin-top:24px;">
+  <a href="{{tips_url}}" class="btn" style="background:#C8521A;">Submit My Tips Now</a>
 </p>`,
   },
 
@@ -304,6 +320,7 @@ export const TEMPLATE_PLACEHOLDERS: Record<string, string[]> = {
   admin_weekly_digest:     ["user_name", "competition_name", "active_entrants", "tips_submitted", "open_rate", "bounce_rate", "leaderboard_url"],
   entrant_join_confirmation: ["user_name", "competition_name", "tips_url"],
   entrant_tips_closing_24h:  ["user_name", "competition_name", "round_number", "round_close_time", "games_list", "tips_url"],
+  entrant_tips_closing_2h:   ["user_name", "competition_name", "round_number", "tips_url"],
   entrant_tips_closing_4h:   ["user_name", "competition_name", "round_number", "round_close_time", "team_a", "team_b", "tips_url"],
   entrant_round_results:     ["user_name", "competition_name", "round_number", "score", "total", "results_table_rows", "leaderboard_url"],
   entrant_weekly_winner:     ["user_name", "competition_name", "round_number", "score", "total", "prize_description", "leaderboard_url"],

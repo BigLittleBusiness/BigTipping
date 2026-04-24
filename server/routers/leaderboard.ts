@@ -2,7 +2,7 @@ import { z } from "zod";
 import { eq, and, desc } from "drizzle-orm";
 import { router, tenantAdminProcedure, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
-import { leaderboardEntries, tips, fixtures, rounds, users, competitions, tenants } from "../../drizzle/schema";
+import { leaderboardEntries, tips, fixtures, rounds, users, competitions, tenants, scheduledJobs } from "../../drizzle/schema";
 import { EmailService } from "../services/emailService";
 
 export const leaderboardRouter = router({
@@ -133,8 +133,19 @@ export const leaderboardRouter = router({
           .where(eq(leaderboardEntries.id, allEntries[i].id));
       }
 
-      // Mark round as scored
-      await db.update(rounds).set({ status: "scored", scoringCompleted: true }).where(eq(rounds.id, input.roundId));
+      // Mark round as scored and record the timestamp
+      const scoredAt = new Date();
+      await db.update(rounds).set({ status: "scored", scoringCompleted: true, scoredAt }).where(eq(rounds.id, input.roundId));
+
+      // Schedule admin digest email 24 hours after scoring (best-effort)
+      const digestScheduledAt = new Date(scoredAt.getTime() + 24 * 60 * 60 * 1000);
+      await db.insert(scheduledJobs).values({
+        jobType: "admin_weekly_digest",
+        referenceId: input.roundId,
+        tenantId: comp.tenantId,
+        scheduledAt: digestScheduledAt,
+        payload: JSON.stringify({ roundId: input.roundId, competitionId: input.competitionId }),
+      }).catch(() => { /* non-fatal */ });
 
       // ── Post-scoring emails ────────────────────────────────────────────────
       // Fetch the round details for email placeholders

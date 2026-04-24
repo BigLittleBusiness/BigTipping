@@ -2,7 +2,7 @@ import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { router, tenantAdminProcedure, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
-import { rounds, competitions, competitionEntrants, users, roundReminders } from "../../drizzle/schema";
+import { rounds, competitions, competitionEntrants, users, roundReminders, tips, fixtures } from "../../drizzle/schema";
 import { notifyOwner } from "../_core/notification";
 import { EmailService } from "../services/emailService";
 
@@ -209,4 +209,114 @@ export const roundsRouter = router({
         message: `Reminder sent to ${entrantRows.length} participant${entrantRows.length !== 1 ? "s" : ""}.`,
       };
     }),
+  /**
+   * Send a 2-hour reminder to entrants who have NOT yet submitted any tips
+   * for the specified round.  Uses a single SQL query to find the gap between
+   * all active entrants and those who already have at least one tip for a
+   * fixture in this round, keeping DB load minimal.
+   *
+   * Intended to be called by an automated scheduler (e.g. a cron job or the
+   * scheduledJobsProcessor) 2 hours before the round's tipsCloseAt time.
+   * Can also be triggered manually by a tenant admin.
+   */
+  send2hReminder: tenantAdminProcedure
+    .input(z.object({
+      roundId: z.number(),
+      competitionId: z.number(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      // Fetch round
+      const [round] = await db.select().from(rounds).where(eq(rounds.id, input.roundId)).limit(1);
+      if (!round) throw new Error("Round not found");
+      if (round.status !== "open") throw new Error("Reminders can only be sent for open rounds");
+
+      // Fetch competition
+      const [comp] = await db.select().from(competitions).where(eq(competitions.id, input.competitionId)).limit(1);
+      if (!comp) throw new Error("Competition not found");
+
+      // Get all fixture IDs for this round (used to detect whether a user has tipped)
+      const roundFixtures = await db
+        .select({ id: fixtures.id })
+        .from(fixtures)
+        .where(eq(fixtures.roundId, input.roundId));
+      const fixtureIds = roundFixtures.map((f) => f.id);
+
+      // Get all active entrants
+      const allEntrants = await db
+        .select({
+          userId: competitionEntrants.userId,
+          userName: users.name,
+          userEmail: users.email,
+        })
+        .from(competitionEntrants)
+        .innerJoin(users, eq(competitionEntrants.userId, users.id))
+        .where(and(
+          eq(competitionEntrants.competitionId, input.competitionId),
+          eq(competitionEntrants.isActive, true),
+        ));
+
+      if (allEntrants.length === 0) {
+        return { sent: 0, skipped: 0, message: "No active participants." };
+      }
+
+      // Get distinct userIds who already have at least one tip for this round
+      let tippedUserIds = new Set<number>();
+      if (fixtureIds.length > 0) {
+        const tippedRows = await db
+          .select({ userId: tips.userId, fixtureId: tips.fixtureId })
+          .from(tips)
+          .where(eq(tips.competitionId, input.competitionId));
+        // Filter to only tips that belong to fixtures in this round
+        tippedRows
+          .filter((t) => fixtureIds.includes(t.fixtureId))
+          .forEach((t) => tippedUserIds.add(t.userId));
+      }
+
+      // Only notify entrants who have NOT yet tipped
+      const untippedEntrants = allEntrants.filter((e) => !tippedUserIds.has(e.userId));
+
+      if (untippedEntrants.length === 0) {
+        return { sent: 0, skipped: allEntrants.length, message: "All participants have already submitted tips." };
+      }
+
+      const roundLabel = round.name ?? `Round ${round.roundNumber}`;
+
+      // Send per-entrant 2h reminder emails (non-fatal — fire and forget)
+      for (const entrant of untippedEntrants) {
+        if (entrant.userEmail) {
+          EmailService.sendEmail({
+            to: entrant.userEmail,
+            templateKey: "entrant_tips_closing_2h",
+            tenantId: comp.tenantId,
+            placeholders: {
+              user_name: entrant.userName ?? entrant.userEmail,
+              competition_name: comp.name,
+              round_number: round.roundNumber,
+              tips_url: `/comp/${comp.id}`,
+            },
+          }).catch(() => { /* non-fatal */ });
+        }
+      }
+
+      // Owner notification (non-fatal)
+      await notifyOwner({
+        title: `2h reminder sent: ${comp.name} — ${roundLabel}`,
+        content: [
+          `A 2-hour deadline reminder was sent to ${untippedEntrants.length} participant(s) who had not yet tipped.`,
+          `${tippedUserIds.size} participant(s) already had tips and were skipped.`,
+          `Competition: ${comp.name}`,
+          `Round: ${roundLabel}`,
+        ].join("\n"),
+      }).catch(() => { /* non-fatal */ });
+
+      return {
+        sent: untippedEntrants.length,
+        skipped: tippedUserIds.size,
+        message: `2h reminder sent to ${untippedEntrants.length} participant(s). ${tippedUserIds.size} already tipped (skipped).`,
+      };
+    }),
+
 });

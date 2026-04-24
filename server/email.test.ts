@@ -187,8 +187,8 @@ describe("EmailService.recordEngagement", () => {
 
 // ── 8. EMAIL_TEMPLATE_DEFAULTS ────────────────────────────────────────────────
 describe("EMAIL_TEMPLATE_DEFAULTS", () => {
-  it("contains exactly 13 templates", () => {
-    expect(EMAIL_TEMPLATE_DEFAULTS).toHaveLength(13);
+  it("contains exactly 14 templates", () => {
+    expect(EMAIL_TEMPLATE_DEFAULTS).toHaveLength(14);
   });
 
   it("every template has required fields", () => {
@@ -201,11 +201,11 @@ describe("EMAIL_TEMPLATE_DEFAULTS", () => {
     }
   });
 
-  it("has 5 admin templates and 8 entrant templates", () => {
+  it("has 5 admin templates and 9 entrant templates", () => {
     const adminCount = EMAIL_TEMPLATE_DEFAULTS.filter(t => t.recipientRole === "admin").length;
     const entrantCount = EMAIL_TEMPLATE_DEFAULTS.filter(t => t.recipientRole === "entrant").length;
     expect(adminCount).toBe(5);
-    expect(entrantCount).toBe(8);
+    expect(entrantCount).toBe(9);
   });
 
   it("all templateKeys are unique", () => {

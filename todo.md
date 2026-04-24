@@ -160,3 +160,31 @@
 ### Tests
 - [x] Unit tests: placeholder replacement, bounce handling, email gating (invalidEmail / marketingDisabled) — 27 tests in email.test.ts
 - [x] Unit tests: template enable/disable logic (EMAIL_TEMPLATE_DEFAULTS and TEMPLATE_PLACEHOLDERS coverage)
+
+## Phase 17: Post-Scoring Digest & 2h Reminder
+
+### 24h Post-Scoring Admin Digest
+- [x] Add scheduled_jobs table to Drizzle schema (jobType, referenceId, scheduledAt, completedAt, status)
+- [x] Generate and apply migration for scheduled_jobs table
+- [x] Add scoredAt timestamp column to rounds table; populate on scoreRound
+- [x] Build getDigestStats(tenantId, roundId, competitionId) in scheduledJobsProcessor.ts (tips submitted, active entrants, open rate, bounce rate)
+- [x] Build processScheduledJobs() function: query pending jobs due now, dispatch emails, mark completed
+- [x] Register setInterval in server to poll processScheduledJobs every 5 minutes
+- [x] Wire scoreRound to insert a scheduled_job for admin_weekly_digest 24h after scoring
+- [x] admin_weekly_digest template updated with real stats placeholders and 24h trigger description
+
+### 2h Round Reminder (Unsent Tips Only)
+- [x] Add entrant_tips_closing_2h template to emailTemplateDefaults.ts
+- [x] Add send2hReminder mutation to rounds router
+- [x] Filter to only entrants with zero tips for the round (Set-based diff, minimal DB round-trips)
+- [x] New template seeded automatically for new tenants via seedEmailTemplatesForTenant
+
+### Tests
+- [x] Unit test: getDigestStats returns safe defaults when DB unavailable (2 tests)
+- [x] Unit test: processScheduledJobs resolves without throwing when DB unavailable
+- [x] Unit test: 2h reminder filtering logic (5 pure unit tests)
+- [x] Unit test: entrant_tips_closing_2h template fields (9 tests)
+- [x] Unit test: admin_weekly_digest 24h trigger description (6 tests)
+- [x] Unit test: updated template counts 14 total, 9 entrant (3 tests)
+- [x] Unit test: ScheduledJob schema type export (1 test)
+- [x] 123 tests total passing across 7 test files, TypeScript 0 errors
