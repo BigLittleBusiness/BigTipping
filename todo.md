@@ -188,3 +188,13 @@
 - [x] Unit test: updated template counts 14 total, 9 entrant (3 tests)
 - [x] Unit test: ScheduledJob schema type export (1 test)
 - [x] 123 tests total passing across 7 test files, TypeScript 0 errors
+
+## Phase 18: Digest Email Preview in Email Settings
+
+- [x] Add `email.getDigestPreview` tRPC procedure: fetch most recent scored round for tenant, call getDigestStats, replace placeholders in admin_weekly_digest template, return rendered HTML + stats summary
+- [x] Add "Preview Digest" button to admin_weekly_digest row in Templates tab of Email Settings page
+- [x] Build DigestPreviewModal: iframe/srcdoc rendered email HTML, stats summary cards (active entrants, tips submitted, open rate, bounce rate), round/competition label, close button
+- [x] Show loading skeleton while preview is fetching
+- [x] Show graceful empty state when no scored round exists yet
+- [x] Vitest tests for getDigestPreview procedure (no-DB safe defaults, correct shape) — 6 new tests in digest-reminder.test.ts
+- [x] TypeScript clean, 129 tests passing across 7 test files

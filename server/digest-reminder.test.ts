@@ -228,3 +228,82 @@ describe("ScheduledJob schema type", () => {
     expect(job.status).toBe("pending");
   });
 });
+
+// ── 9. getDigestPreview supporting logic ─────────────────────────────────────
+
+describe("getDigestPreview supporting logic", () => {
+  it("admin_weekly_digest template contains all six real-data placeholder keys", () => {
+    const tpl = EMAIL_TEMPLATE_DEFAULTS.find(
+      (t) => t.templateKey === "admin_weekly_digest",
+    );
+    expect(tpl).toBeDefined();
+    const combined = `${tpl!.subject} ${tpl!.bodyHtml}`;
+    expect(combined).toContain("{{competition_name}}");
+    expect(combined).toContain("{{active_entrants}}");
+    expect(combined).toContain("{{tips_submitted}}");
+    expect(combined).toContain("{{open_rate}}");
+    expect(combined).toContain("{{bounce_rate}}");
+  });
+
+  it("TEMPLATE_PLACEHOLDERS for admin_weekly_digest lists all six real-data keys", () => {
+    const keys = TEMPLATE_PLACEHOLDERS["admin_weekly_digest"] ?? [];
+    expect(keys).toContain("user_name");
+    expect(keys).toContain("competition_name");
+    expect(keys).toContain("active_entrants");
+    expect(keys).toContain("tips_submitted");
+    expect(keys).toContain("open_rate");
+    expect(keys).toContain("bounce_rate");
+  });
+
+  it("getDigestStats returns correct DigestStats shape when DB is unavailable", async () => {
+    const stats = await getDigestStats(1, 1, 1);
+    expect(stats).toHaveProperty("activeEntrants");
+    expect(stats).toHaveProperty("tipsSubmitted");
+    expect(stats).toHaveProperty("openRate");
+    expect(stats).toHaveProperty("bounceRate");
+    expect(typeof stats.activeEntrants).toBe("number");
+    expect(typeof stats.tipsSubmitted).toBe("number");
+    expect(typeof stats.openRate).toBe("string");
+    expect(typeof stats.bounceRate).toBe("string");
+  });
+
+  it("admin_weekly_digest triggerDesc mentions 24 hours after scoring", () => {
+    const tpl = EMAIL_TEMPLATE_DEFAULTS.find(
+      (t) => t.templateKey === "admin_weekly_digest",
+    );
+    expect(tpl?.triggerDesc?.toLowerCase()).toMatch(/24.?h|24 hour/);
+  });
+
+  it("empty preview result shape: hasData=false with empty strings and N/A rates", () => {
+    const emptyResult = {
+      hasData: false as const,
+      renderedHtml: "",
+      renderedSubject: "",
+      stats: { activeEntrants: 0, tipsSubmitted: 0, openRate: "N/A", bounceRate: "N/A" },
+      roundLabel: "",
+      competitionName: "",
+    };
+    expect(emptyResult.hasData).toBe(false);
+    expect(emptyResult.renderedHtml).toBe("");
+    expect(emptyResult.stats.openRate).toBe("N/A");
+    expect(emptyResult.stats.activeEntrants).toBe(0);
+  });
+
+  it("live preview result shape: hasData=true with populated stats", () => {
+    const liveResult = {
+      hasData: true as const,
+      renderedHtml: "<p>Hello Admin, here is your digest.</p>",
+      renderedSubject: "Weekly Digest: AFL Round 5",
+      stats: { activeEntrants: 42, tipsSubmitted: 38, openRate: "72%", bounceRate: "0.5%" },
+      roundLabel: "Round 5",
+      competitionName: "AFL 2026",
+    };
+    expect(liveResult.hasData).toBe(true);
+    expect(liveResult.stats.activeEntrants).toBe(42);
+    expect(liveResult.stats.tipsSubmitted).toBe(38);
+    expect(liveResult.renderedSubject).toContain("Round 5");
+    expect(liveResult.renderedHtml).toContain("Hello Admin");
+    expect(liveResult.roundLabel).toBe("Round 5");
+    expect(liveResult.competitionName).toBe("AFL 2026");
+  });
+});

@@ -6,12 +6,16 @@ import {
   emailTemplates,
   tenantEmailSettings,
   emailEvents,
+  rounds,
+  competitions,
+  tenants,
 } from "../../drizzle/schema";
-import { EmailService } from "../services/emailService";
+import { EmailService, replacePlaceholders } from "../services/emailService";
 import {
   EMAIL_TEMPLATE_DEFAULTS,
   TEMPLATE_PLACEHOLDERS,
 } from "../services/emailTemplateDefaults";
+import { getDigestStats } from "../services/scheduledJobsProcessor";
 
 export const emailRouter = router({
   // ── Templates ──────────────────────────────────────────────────────────────
@@ -168,6 +172,107 @@ export const emailRouter = router({
       .limit(50);
 
     return { stats, recentEvents };
+  }),
+
+  // ── Digest Preview ─────────────────────────────────────────────────────────
+
+  /**
+   * Return a rendered preview of the admin_weekly_digest email using real
+   * engagement data from the most recently scored round for this tenant.
+   *
+   * Returns:
+   *  - hasData: false when no scored round exists yet
+   *  - renderedHtml: fully substituted email body (ready for iframe srcdoc)
+   *  - renderedSubject: the substituted subject line
+   *  - stats: raw DigestStats for the summary cards
+   *  - roundLabel: human-readable round name
+   *  - competitionName: competition name
+   */
+  getDigestPreview: tenantAdminProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    const empty = {
+      hasData: false as const,
+      renderedHtml: "",
+      renderedSubject: "",
+      stats: { activeEntrants: 0, tipsSubmitted: 0, openRate: "N/A", bounceRate: "N/A" },
+      roundLabel: "",
+      competitionName: "",
+    };
+    if (!db) return empty;
+    const tenantId = ctx.user.tenantId!;
+
+    // Find the most recently scored round for this tenant (across all competitions)
+    const recentRoundRows = await db
+      .select({
+        roundId: rounds.id,
+        roundName: rounds.name,
+        roundNumber: rounds.roundNumber,
+        competitionId: rounds.competitionId,
+      })
+      .from(rounds)
+      .innerJoin(competitions, eq(rounds.competitionId, competitions.id))
+      .where(
+        and(
+          eq(competitions.tenantId, tenantId),
+          sql`${rounds.scoredAt} IS NOT NULL`,
+        ),
+      )
+      .orderBy(desc(rounds.scoredAt))
+      .limit(1);
+
+    if (recentRoundRows.length === 0) return empty;
+
+    const { roundId, roundName, roundNumber, competitionId } = recentRoundRows[0];
+
+    // Fetch competition name, tenant name, and stats in parallel
+    const [compRows, tenantRows, stats] = await Promise.all([
+      db.select({ name: competitions.name }).from(competitions)
+        .where(eq(competitions.id, competitionId)).limit(1),
+      db.select({ name: tenants.name }).from(tenants)
+        .where(eq(tenants.id, tenantId)).limit(1),
+      getDigestStats(tenantId, roundId, competitionId),
+    ]);
+
+    const competitionName = compRows[0]?.name ?? "Competition";
+    const tenantName = tenantRows[0]?.name ?? "Admin";
+    const roundLabel = roundName ?? `Round ${roundNumber}`;
+
+    // Fetch the tenant's customised template (or fall back to default)
+    const templateRows = await db
+      .select({ subject: emailTemplates.subject, bodyHtml: emailTemplates.bodyHtml })
+      .from(emailTemplates)
+      .where(
+        and(
+          eq(emailTemplates.tenantId, tenantId),
+          eq(emailTemplates.templateKey, "admin_weekly_digest"),
+        ),
+      )
+      .limit(1);
+
+    const defaultTpl = EMAIL_TEMPLATE_DEFAULTS.find(
+      (t) => t.templateKey === "admin_weekly_digest",
+    );
+    const subject = templateRows[0]?.subject ?? defaultTpl?.subject ?? "";
+    const bodyHtml = templateRows[0]?.bodyHtml ?? defaultTpl?.bodyHtml ?? "";
+
+    const placeholders: Record<string, string | number> = {
+      user_name: tenantName,
+      competition_name: competitionName,
+      active_entrants: stats.activeEntrants,
+      tips_submitted: stats.tipsSubmitted,
+      open_rate: stats.openRate,
+      bounce_rate: stats.bounceRate,
+      leaderboard_url: `/admin/competitions/${competitionId}`,
+    };
+
+    return {
+      hasData: true as const,
+      renderedHtml: replacePlaceholders(bodyHtml, placeholders),
+      renderedSubject: replacePlaceholders(subject, placeholders),
+      stats,
+      roundLabel,
+      competitionName,
+    };
   }),
 
   // ── Seed Templates ─────────────────────────────────────────────────────────

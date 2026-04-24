@@ -11,7 +11,7 @@
  */
 
 import { eq, and, lte, gte } from "drizzle-orm";
-import { getDb } from "../db";
+import { getDb, resetDb } from "../db";
 import {
   scheduledJobs,
   rounds,
@@ -23,6 +23,28 @@ import {
   emailEvents,
 } from "../../drizzle/schema";
 import { EmailService } from "./emailService";
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Returns true if the error (or its `.cause`) is a transient TCP-level
+ * connection error that should trigger a reconnect rather than a job failure.
+ */
+function isConnectionError(err: unknown): boolean {
+  const check = (e: unknown) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    return (
+      msg.includes("ECONNRESET") ||
+      msg.includes("ECONNREFUSED") ||
+      msg.includes("ETIMEDOUT") ||
+      msg.includes("EPIPE")
+    );
+  };
+  if (check(err)) return true;
+  // Drizzle wraps the underlying error in `.cause`
+  if (err instanceof Error && err.cause) return check(err.cause);
+  return false;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -172,22 +194,39 @@ async function processDigestJob(job: typeof scheduledJobs.$inferSelect): Promise
  * if the interval fires while a previous run is still in progress.
  */
 export async function processScheduledJobs(): Promise<void> {
-  const db = await getDb();
+  let db: Awaited<ReturnType<typeof getDb>>;
+  try {
+    db = await getDb();
+  } catch {
+    resetDb();
+    return;
+  }
   if (!db) return;
 
   const now = new Date();
 
   // Fetch pending jobs due now (status index keeps this fast)
-  const pendingJobs = await db
-    .select()
-    .from(scheduledJobs)
-    .where(
-      and(
-        eq(scheduledJobs.status, "pending"),
-        lte(scheduledJobs.scheduledAt, now),
-      ),
-    )
-    .limit(50); // process at most 50 per tick to bound execution time
+  let pendingJobs: (typeof scheduledJobs.$inferSelect)[] = [];
+  try {
+    pendingJobs = await db
+      .select()
+      .from(scheduledJobs)
+      .where(
+        and(
+          eq(scheduledJobs.status, "pending"),
+          lte(scheduledJobs.scheduledAt, now),
+        ),
+      )
+      .limit(50); // process at most 50 per tick
+  } catch (err) {
+    if (isConnectionError(err)) {
+      resetDb();
+      console.warn("[ScheduledJobs] DB connection reset — will reconnect on next poll");
+    } else {
+      console.error("[ScheduledJobs] Failed to fetch pending jobs:", err);
+    }
+    return;
+  }
 
   for (const job of pendingJobs) {
     // Optimistic lock: mark as "processing" before dispatching
@@ -214,11 +253,24 @@ export async function processScheduledJobs(): Promise<void> {
         .set({ status: "done", completedAt: new Date() })
         .where(eq(scheduledJobs.id, job.id));
     } catch (err) {
+      if (isConnectionError(err)) {
+        // TCP connection lost — clear cached instance and abort this tick.
+        // The next poll will create a fresh connection.
+        resetDb();
+        console.warn("[ScheduledJobs] DB connection reset — will reconnect on next poll");
+        return;
+      }
       console.error(`[ScheduledJobs] Job ${job.id} (${job.jobType}) failed:`, err);
-      await db
-        .update(scheduledJobs)
-        .set({ status: "failed" })
-        .where(eq(scheduledJobs.id, job.id));
+      try {
+        await db
+          .update(scheduledJobs)
+          .set({ status: "failed" })
+          .where(eq(scheduledJobs.id, job.id));
+      } catch (markErr) {
+        if (!isConnectionError(markErr)) {
+          console.warn(`[ScheduledJobs] Could not mark job ${job.id} as failed`);
+        }
+      }
     }
   }
 }
@@ -237,14 +289,18 @@ export function startScheduledJobsProcessor(): void {
 
   // Run once immediately on startup to catch any jobs that fired while the
   // server was down, then repeat on the interval.
-  processScheduledJobs().catch((err) =>
-    console.error("[ScheduledJobs] Initial poll error:", err),
-  );
+  processScheduledJobs().catch((err) => {
+    if (!isConnectionError(err)) {
+      console.error("[ScheduledJobs] Initial poll error:", err);
+    }
+  });
 
   _intervalHandle = setInterval(() => {
-    processScheduledJobs().catch((err) =>
-      console.error("[ScheduledJobs] Poll error:", err),
-    );
+    processScheduledJobs().catch((err) => {
+      if (!isConnectionError(err)) {
+        console.error("[ScheduledJobs] Poll error:", err);
+      }
+    });
   }, POLL_INTERVAL_MS);
 
   console.log("[ScheduledJobs] Processor started (poll interval: 5 min)");

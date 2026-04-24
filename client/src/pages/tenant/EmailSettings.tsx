@@ -7,6 +7,7 @@ import {
   Mail, Settings, BarChart3, ToggleLeft, ToggleRight,
   Edit3, Send, RefreshCw, Upload, Eye, EyeOff,
   CheckCircle2, XCircle, AlertTriangle, Info,
+  LineChart, Users, TrendingUp, Inbox,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,8 +67,110 @@ function PlaceholderBadge({ name }: { name: string }) {
     </button>
   );
 }
+// ── Digest Preview Modal ───────────────────────────────────────────────────────────
+function DigestPreviewModal({ onClose }: { onClose: () => void }) {
+  const { data, isLoading } = trpc.email.getDigestPreview.useQuery();
 
-// ── Customise Modal ───────────────────────────────────────────────────────────
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <LineChart size={18} className="text-primary" />
+            Weekly Digest Preview
+          </DialogTitle>
+          {data?.hasData && (
+            <p className="text-sm text-muted-foreground">
+              Based on <span className="font-medium">{data.roundLabel}</span> — {data.competitionName}
+            </p>
+          )}
+        </DialogHeader>
+
+        {isLoading && (
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" />
+            <p className="text-sm text-muted-foreground">Loading real engagement data…</p>
+          </div>
+        )}
+
+        {!isLoading && !data?.hasData && (
+          <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
+            <Inbox size={40} className="opacity-30" />
+            <p className="font-medium">No scored rounds yet</p>
+            <p className="text-sm text-center max-w-xs">
+              The digest preview will appear here once at least one round has been scored.
+              Score a round first, then return to preview the digest.
+            </p>
+          </div>
+        )}
+
+        {!isLoading && data?.hasData && (
+          <div className="space-y-5">
+            {/* Stats summary cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-lg border bg-card p-3 text-center">
+                <Users size={16} className="mx-auto mb-1 text-blue-500" />
+                <div className="text-2xl font-bold tabular-nums">{data.stats.activeEntrants}</div>
+                <div className="text-xs text-muted-foreground">Active Entrants</div>
+              </div>
+              <div className="rounded-lg border bg-card p-3 text-center">
+                <Send size={16} className="mx-auto mb-1 text-purple-500" />
+                <div className="text-2xl font-bold tabular-nums">{data.stats.tipsSubmitted}</div>
+                <div className="text-xs text-muted-foreground">Tips Submitted</div>
+              </div>
+              <div className="rounded-lg border bg-card p-3 text-center">
+                <TrendingUp size={16} className="mx-auto mb-1 text-green-500" />
+                <div className="text-2xl font-bold tabular-nums">{data.stats.openRate}</div>
+                <div className="text-xs text-muted-foreground">Open Rate (30d)</div>
+              </div>
+              <div className="rounded-lg border bg-card p-3 text-center">
+                <AlertTriangle size={16} className="mx-auto mb-1 text-orange-500" />
+                <div className="text-2xl font-bold tabular-nums">{data.stats.bounceRate}</div>
+                <div className="text-xs text-muted-foreground">Bounce Rate (30d)</div>
+              </div>
+            </div>
+
+            {/* Subject line */}
+            <div className="rounded-md border bg-muted/40 px-4 py-2">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide mr-2">Subject:</span>
+              <span className="text-sm font-medium">{data.renderedSubject}</span>
+            </div>
+
+            {/* Rendered email body in a sandboxed iframe */}
+            <div className="rounded-md border overflow-hidden">
+              <div className="bg-muted/30 border-b px-4 py-2 flex items-center gap-2">
+                <Mail size={13} className="text-muted-foreground" />
+                <span className="text-xs text-muted-foreground font-medium">Email body preview</span>
+                <Badge variant="outline" className="ml-auto text-xs">Live data</Badge>
+              </div>
+              <iframe
+                srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:0;background:#f9fafb;font-family:sans-serif;}</style></head><body>${data.renderedHtml}</body></html>`}
+                className="w-full border-0"
+                style={{ minHeight: 480 }}
+                title="Digest email preview"
+                sandbox="allow-same-origin"
+                onLoad={(e) => {
+                  // Auto-resize iframe to content height
+                  const iframe = e.currentTarget;
+                  try {
+                    const h = iframe.contentDocument?.body?.scrollHeight;
+                    if (h) iframe.style.height = `${h + 32}px`;
+                  } catch { /* cross-origin guard */ }
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Customise Modal ────────────────────────────────────────────────────────────
 function CustomiseModal({
   template,
   onClose,
@@ -176,10 +279,11 @@ function CustomiseModal({
   );
 }
 
-// ── Templates Tab ─────────────────────────────────────────────────────────────
+/// ── Templates Tab ────────────────────────────────────────────────────────────
 function TemplatesTab() {
   const { data: templates = [], isLoading } = trpc.email.listTemplates.useQuery();
   const [customising, setCustomising] = useState<Template | null>(null);
+  const [showDigestPreview, setShowDigestPreview] = useState(false);
   const utils = trpc.useUtils();
 
   const toggle = trpc.email.updateTemplate.useMutation({
@@ -251,6 +355,19 @@ function TemplatesTab() {
         </p>
       </div>
       <div className="flex items-center gap-1 shrink-0">
+        {/* Preview Digest button — only shown for the admin_weekly_digest template */}
+        {t.templateKey === "admin_weekly_digest" && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 px-2 text-xs text-primary hover:text-primary hover:bg-primary/10"
+            onClick={() => setShowDigestPreview(true)}
+            title="Preview this email with real engagement data from the most recent scored round"
+          >
+            <LineChart size={13} className="mr-1" />
+            Preview Digest
+          </Button>
+        )}
         <Button
           size="sm"
           variant="ghost"
@@ -325,6 +442,9 @@ function TemplatesTab() {
           onClose={() => setCustomising(null)}
           onSaved={() => setCustomising(null)}
         />
+      )}
+      {showDigestPreview && (
+        <DigestPreviewModal onClose={() => setShowDigestPreview(false)} />
       )}
     </div>
   );
