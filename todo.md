@@ -231,5 +231,21 @@
 - [x] Added userId and referenceId columns to email_events table (migration 0007 applied)
 - [x] Fixture startTime update path: added updateStartTime mutation to fixtures router that cancels pending job and reschedules
 - [x] scheduledJobsProcessor: processTipsClosingReminderJob already filters untipped entrants for all 3 reminder types (24h, 4h, 2h)
-- [x] Unit tests: 18 new tests in automation.test.ts — job types, idempotency guard, draw detection, rescheduling logic, SendEmailParams fields
-- [x] 147 tests total passing across 8 test files, TypeScript 0 errors
+- [x] Unit tests: 18 new tests in automation.test.ts — job types, idempotency guard, draw detection, rescheduling logic, SendEmailPar### Backend — System Admin Procedures
+- [x] Add `fixtures.listAllRounds` systemAdminProcedure: all rounds across all tenants, enriched with competition name, tenant name, fixture count
+- [x] Add `fixtures.getFixturesForRound` systemAdminProcedure: fixtures + team names + round.tipsCloseAt
+- [x] Add `fixtures.systemUpdateStartTime`: updates fixture, recalculates round.tipsCloseAt = earliest fixture startTime, cancels all pending time-based jobs, reschedules admin_round_starting + tips_closing_24h/4h/2h, returns rescheduled job list
+- [x] rescheduleRoundJobs() helper: cancels 4 job types atomically, then inserts new jobs
+
+### Frontend — System Admin Fixture Manager
+- [x] Add `/admin/fixtures` page to System Admin section
+- [x] Round selector: searchable text filter + Select dropdown listing all rounds (tenant — competition · round name · status · fixture count)
+- [x] Fixture list: table showing homeTeam vs awayTeam, venue, editable datetime-local input per row
+- [x] Save button per row: calls `fixtures.systemUpdateStartTime`, shows loading spinner, success/error toast (sonner)
+- [x] After save: RescheduledJobsPanel confirmation panel showing all rescheduled jobs with human-readable labels and new scheduled times
+- [x] Round tipsCloseAt display: shows current closing time, updates live after any fixture save
+- [x] Add "Fixture Manager" nav item to System Admin sidebar (CalendarClock icon)
+- [x] Route /admin/fixtures wired in App.tsx
+
+### Tests
+- [x] TypeScript clean (0 errors), 167 tests passing across 8 test files

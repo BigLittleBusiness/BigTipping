@@ -26,6 +26,7 @@ import Contact from "./pages/marketing/Contact";
 import AdminOverview from "./pages/admin/Overview";
 import AdminTenants from "./pages/admin/Tenants";
 import AdminSports from "./pages/admin/Sports";
+import FixtureManager from "./pages/admin/FixtureManager";
 
 // Tenant Admin pages
 import TenantDashboard from "./pages/tenant/Dashboard";
@@ -91,6 +92,7 @@ function Router() {
       <Route path="/admin/overview" component={AdminOverview} />
       <Route path="/admin/tenants" component={AdminTenants} />
       <Route path="/admin/sports" component={AdminSports} />
+      <Route path="/admin/fixtures" component={FixtureManager} />
 
       {/* Tenant Admin */}
       <Route path="/tenant/dashboard" component={TenantDashboard} />
