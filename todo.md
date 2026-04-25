@@ -198,3 +198,38 @@
 - [x] Show graceful empty state when no scored round exists yet
 - [x] Vitest tests for getDigestPreview procedure (no-DB safe defaults, correct shape) — 6 new tests in digest-reminder.test.ts
 - [x] TypeScript clean, 129 tests passing across 7 test files
+
+## Phase 19: Send Test Button in Digest Preview Modal
+
+- [x] Add Send Test button to DigestPreviewModal footer (only visible when hasData=true)
+- [x] Wire to trpc.email.sendTest with templateKey "admin_weekly_digest"
+- [x] Show loading spinner while sending, success toast on sent, info toast on stub mode, error toast on failure
+- [x] TypeScript clean, 129 tests passing
+
+## Phase 20: Automate All 6 Non-Automated Email Templates
+
+### Scheduled Job Processor Extensions
+- [x] Add job types: tips_closing_24h, tips_closing_4h, tips_closing_2h, admin_round_starting to scheduledJobsProcessor
+- [x] Schedule admin_round_starting job (4h before fixture startTime) when a fixture is created with a startTime
+- [x] Schedule tips_closing_24h, tips_closing_4h, tips_closing_2h jobs when tipsCloseAt is set on a round (create or setDeadline)
+- [x] tips_closing_2h: filters to only untipped entrants at send time (existing send2hReminder logic reused)
+- [x] admin_round_starting: sends admin_round_starting to tenant contactEmail
+
+### Scoring Flow Extensions (leaderboard.scoreRound)
+- [x] Wire entrant_perfect_round: send to entrants who tipped all fixtures correctly in the round
+- [x] Wire entrant_streak_milestone: send to entrants whose cumulative correct-tip streak hits 5, 10, 15, 20
+- [x] Wire entrant_leaderboard_milestone: send to entrants who move into Top 10, Top 20, or Top 50 for the first time this round
+
+### Draw Detection
+- [x] Wire admin_draw_match: send to tenant admin when a fixture result is entered as a draw (homeScore == awayScore, winnerId null)
+
+### Tests
+- [x] TypeScript clean (0 errors), 129 tests passing across 7 test files
+
+### Phase 20 Gap Resolution
+- [x] Idempotency: check email_events before sending milestone emails (entrant_perfect_round, entrant_streak_milestone, entrant_leaderboard_milestone) — alreadySent() guard using userId+templateKey+referenceId index
+- [x] Added userId and referenceId columns to email_events table (migration 0007 applied)
+- [x] Fixture startTime update path: added updateStartTime mutation to fixtures router that cancels pending job and reschedules
+- [x] scheduledJobsProcessor: processTipsClosingReminderJob already filters untipped entrants for all 3 reminder types (24h, 4h, 2h)
+- [x] Unit tests: 18 new tests in automation.test.ts — job types, idempotency guard, draw detection, rescheduling logic, SendEmailParams fields
+- [x] 147 tests total passing across 8 test files, TypeScript 0 errors

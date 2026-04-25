@@ -41,6 +41,8 @@ export interface SendEmailParams {
   transactional?: boolean;
   /** Optional recipient userId for preference gating */
   userId?: number;
+  /** Optional reference ID (e.g. roundId) stored in email_events for idempotency checks */
+  referenceId?: number;
 }
 
 export interface BouncePayload {
@@ -309,6 +311,8 @@ export const EmailService = {
       recipientEmail: params.to,
       tenantId: params.tenantId,
       templateKey: params.templateKey,
+      userId: params.userId ?? null,
+      referenceId: params.referenceId ?? null,
       eventType: "sent",
     });
 

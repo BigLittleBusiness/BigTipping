@@ -70,6 +70,25 @@ function PlaceholderBadge({ name }: { name: string }) {
 // ── Digest Preview Modal ───────────────────────────────────────────────────────────
 function DigestPreviewModal({ onClose }: { onClose: () => void }) {
   const { data, isLoading } = trpc.email.getDigestPreview.useQuery();
+  const sendTest = trpc.email.sendTest.useMutation({
+    onSuccess: (result) => {
+      if (result.sent) {
+        toast.success("Test email sent", {
+          description: "Check your inbox — the digest email is on its way.",
+        });
+      } else if (!result.reason) {
+        // Sent in stub mode (no SES configured) — treat as informational
+        toast.info("Stub mode active", {
+          description: "AWS SES is not configured. The email was logged to the server console instead.",
+        });
+      } else {
+        toast.error("Send failed", { description: result.reason });
+      }
+    },
+    onError: (err) => {
+      toast.error("Send failed", { description: err.message });
+    },
+  });
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -162,8 +181,37 @@ function DigestPreviewModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Close</Button>
+        <DialogFooter className="flex items-center justify-between gap-2">
+          <div className="flex-1">
+            {data?.hasData && (
+              <p className="text-xs text-muted-foreground">
+                Test email will be sent to your account email address.
+              </p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {data?.hasData && (
+              <Button
+                variant="outline"
+                onClick={() => sendTest.mutate({ templateKey: "admin_weekly_digest" })}
+                disabled={sendTest.isPending}
+                className="gap-2"
+              >
+                {sendTest.isPending ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    Sending…
+                  </>
+                ) : (
+                  <>
+                    <Send size={14} />
+                    Send Test Email
+                  </>
+                )}
+              </Button>
+            )}
+            <Button variant="outline" onClick={onClose}>Close</Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

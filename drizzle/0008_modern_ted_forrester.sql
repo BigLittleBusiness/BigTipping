@@ -1,0 +1,1 @@
+ALTER TABLE `scheduled_jobs` MODIFY COLUMN `status` enum('pending','processing','done','failed','cancelled') NOT NULL DEFAULT 'pending';

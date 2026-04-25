@@ -2,7 +2,7 @@ import { z } from "zod";
 import { eq, and, desc } from "drizzle-orm";
 import { router, tenantAdminProcedure, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
-import { leaderboardEntries, tips, fixtures, rounds, users, competitions, tenants, scheduledJobs } from "../../drizzle/schema";
+import { leaderboardEntries, tips, fixtures, rounds, users, competitions, tenants, scheduledJobs, emailEvents } from "../../drizzle/schema";
 import { EmailService } from "../services/emailService";
 
 export const leaderboardRouter = router({
@@ -256,6 +256,94 @@ export const leaderboardRouter = router({
               leaderboard_url: `/admin/competitions/${input.competitionId}`,
             },
           }).catch(() => { /* non-fatal */ });
+        }
+      }
+
+      // ── Milestone emails (idempotent: skip if already sent for this user+round) ──
+      // Re-fetch updated entries with streak/rank data for milestone detection
+      const updatedEntries = await db.select().from(leaderboardEntries)
+        .where(eq(leaderboardEntries.competitionId, input.competitionId));
+      const STREAK_MILESTONES = [5, 10, 15, 20];
+      const RANK_MILESTONES = [10, 20, 50];
+      // Helper: check if a milestone email was already sent for this user+round
+      const alreadySent = async (userId: number, templateKey: string): Promise<boolean> => {
+        const rows = await db.select({ id: emailEvents.id }).from(emailEvents).where(
+          and(
+            eq(emailEvents.userId, userId),
+            eq(emailEvents.templateKey, templateKey),
+            eq(emailEvents.referenceId, input.roundId),
+            eq(emailEvents.eventType, "sent"),
+          )
+        ).limit(1);
+        return rows.length > 0;
+      };
+      for (const entry of updatedEntries) {
+        const [entrantUser] = await db.select({ email: users.email, name: users.name })
+          .from(users).where(eq(users.id, entry.userId)).limit(1);
+        if (!entrantUser?.email) continue;
+        const userTips = tipsByUser[entry.userId] ?? [];
+        const correct = userTips.filter(
+          t => winnerMap[t.fixtureId] !== null && t.pickedTeamId === winnerMap[t.fixtureId]
+        ).length;
+        // entrant_perfect_round: all fixtures tipped correctly this round
+        if (correct === fixtureIds.length && fixtureIds.length > 0) {
+          if (!await alreadySent(entry.userId, "entrant_perfect_round")) {
+            EmailService.sendEmail({
+              to: entrantUser.email,
+              templateKey: "entrant_perfect_round",
+              tenantId: comp.tenantId,
+              userId: entry.userId,
+              referenceId: input.roundId,
+              placeholders: {
+                user_name: entrantUser.name ?? entrantUser.email,
+                competition_name: comp.name,
+                round_number: roundNumber,
+                score: correct,
+                total: fixtureIds.length,
+                leaderboard_url: `/comp/${input.competitionId}`,
+              },
+            }).catch(() => { /* non-fatal */ });
+          }
+        }
+        // entrant_streak_milestone: cumulative streak hits 5, 10, 15, or 20
+        if (STREAK_MILESTONES.includes(entry.currentStreak)) {
+          if (!await alreadySent(entry.userId, "entrant_streak_milestone")) {
+            EmailService.sendEmail({
+              to: entrantUser.email,
+              templateKey: "entrant_streak_milestone",
+              tenantId: comp.tenantId,
+              userId: entry.userId,
+              referenceId: input.roundId,
+              placeholders: {
+                user_name: entrantUser.name ?? entrantUser.email,
+                competition_name: comp.name,
+                streak: entry.currentStreak,
+                leaderboard_url: `/comp/${input.competitionId}`,
+              },
+            }).catch(() => { /* non-fatal */ });
+          }
+        }
+        // entrant_leaderboard_milestone: moved into Top 10 / 20 / 50 for the first time this round
+        const crossedMilestone = RANK_MILESTONES.find(
+          m => entry.rank <= m && (entry.previousRank > m || entry.previousRank === 0)
+        );
+        if (crossedMilestone) {
+          if (!await alreadySent(entry.userId, "entrant_leaderboard_milestone")) {
+            EmailService.sendEmail({
+              to: entrantUser.email,
+              templateKey: "entrant_leaderboard_milestone",
+              tenantId: comp.tenantId,
+              userId: entry.userId,
+              referenceId: input.roundId,
+              placeholders: {
+                user_name: entrantUser.name ?? entrantUser.email,
+                competition_name: comp.name,
+                rank: entry.rank,
+                milestone: crossedMilestone,
+                leaderboard_url: `/comp/${input.competitionId}`,
+              },
+            }).catch(() => { /* non-fatal */ });
+          }
         }
       }
 

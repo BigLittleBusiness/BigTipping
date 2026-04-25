@@ -289,6 +289,10 @@ export const emailEvents = mysqlTable("email_events", {
   recipientEmail: varchar("recipientEmail", { length: 320 }).notNull(),
   tenantId:       int("tenantId").notNull(),
   templateKey:    varchar("templateKey", { length: 100 }).notNull(),
+  /** Optional: userId of the recipient (for idempotency checks on per-user milestone emails) */
+  userId:         int("userId"),
+  /** Optional: round/fixture/job reference ID (for idempotency checks — e.g. roundId for milestone emails) */
+  referenceId:    int("referenceId"),
   eventType:      mysqlEnum("eventType", ["sent", "delivered", "bounce", "complaint", "open", "click"]).notNull(),
   bounceType:     varchar("bounceType", { length: 50 }),
   diagnosticCode: text("diagnosticCode"),
@@ -297,6 +301,7 @@ export const emailEvents = mysqlTable("email_events", {
   index("ee_tenantId_idx").on(t.tenantId),
   index("ee_recipient_idx").on(t.recipientEmail),
   index("ee_messageId_idx").on(t.messageId),
+  index("ee_userId_template_ref_idx").on(t.userId, t.templateKey, t.referenceId),
 ]);
 export type EmailEvent = typeof emailEvents.$inferSelect;
 export type InsertEmailEvent = typeof emailEvents.$inferInsert;
@@ -324,7 +329,7 @@ export const scheduledJobs = mysqlTable("scheduled_jobs", {
   tenantId:     int("tenantId").notNull(),
   scheduledAt:  timestamp("scheduledAt").notNull(),
   completedAt:  timestamp("completedAt"),
-  status:       mysqlEnum("status", ["pending", "processing", "done", "failed"]).default("pending").notNull(),
+  status:       mysqlEnum("status", ["pending", "processing", "done", "failed", "cancelled"]).default("pending").notNull(),
   payload:      text("payload"),                // JSON blob for extra context
   createdAt:    timestamp("createdAt").defaultNow().notNull(),
 }, (t) => [

@@ -5,12 +5,15 @@
  * every 5 minutes and dispatches pending jobs whose `scheduledAt` time has
  * passed.  This avoids the need for an external worker process or cron daemon.
  *
- * Currently supported job types:
- *   - "admin_weekly_digest"  — sends the post-scoring digest email to the
- *                              tenant admin 24 hours after a round is scored.
+ * Supported job types:
+ *   - "admin_weekly_digest"    — digest email 24h after scoring
+ *   - "admin_round_starting"   — admin alert 4h before round first fixture
+ *   - "tips_closing_24h"       — 24h reminder to all untipped entrants
+ *   - "tips_closing_4h"        — 4h reminder to untipped entrants
+ *   - "tips_closing_2h"        — 2h reminder to untipped entrants
  */
 
-import { eq, and, lte, gte } from "drizzle-orm";
+import { eq, and, lte, gte, inArray, notInArray } from "drizzle-orm";
 import { getDb, resetDb } from "../db";
 import {
   scheduledJobs,
@@ -21,6 +24,8 @@ import {
   tips,
   fixtures,
   emailEvents,
+  users,
+  leaderboardEntries,
 } from "../../drizzle/schema";
 import { EmailService } from "./emailService";
 
@@ -186,6 +191,156 @@ async function processDigestJob(job: typeof scheduledJobs.$inferSelect): Promise
   });
 }
 
+// ── Round Starting Job ───────────────────────────────────────────────────────
+/**
+ * Sends admin_round_starting to the tenant admin 4h before the first fixture
+ * of a round.
+ */
+async function processRoundStartingJob(job: typeof scheduledJobs.$inferSelect): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  let payload: { roundId: number; competitionId: number } | null = null;
+  try {
+    payload = job.payload ? JSON.parse(job.payload) : null;
+  } catch {
+    throw new Error("Invalid job payload JSON");
+  }
+  if (!payload?.roundId || !payload?.competitionId) {
+    throw new Error("Missing roundId or competitionId in round_starting job payload");
+  }
+  const { roundId, competitionId } = payload;
+  const [roundRows, compRows, tenantRows] = await Promise.all([
+    db.select().from(rounds).where(eq(rounds.id, roundId)).limit(1),
+    db.select().from(competitions).where(eq(competitions.id, competitionId)).limit(1),
+    db.select().from(tenants).where(eq(tenants.id, job.tenantId)).limit(1),
+  ]);
+  const round = roundRows[0];
+  const comp = compRows[0];
+  const tenant = tenantRows[0];
+  if (!round || !comp || !tenant) return;
+  const adminEmail = tenant.contactEmail;
+  if (!adminEmail) return;
+  // Count fixtures for the round
+  const roundFixtures = await db.select({ id: fixtures.id, startTime: fixtures.startTime })
+    .from(fixtures).where(eq(fixtures.roundId, roundId));
+  const firstKickoff = roundFixtures
+    .map(f => f.startTime)
+    .filter(Boolean)
+    .sort((a, b) => new Date(a!).getTime() - new Date(b!).getTime())[0];
+  await EmailService.sendEmail({
+    to: adminEmail,
+    templateKey: "admin_round_starting",
+    tenantId: job.tenantId,
+    transactional: true,
+    placeholders: {
+      user_name: tenant.name ?? "Admin",
+      competition_name: comp.name,
+      round_number: round.roundNumber,
+      round_name: round.name ?? `Round ${round.roundNumber}`,
+      fixture_count: roundFixtures.length,
+      first_kickoff: firstKickoff
+        ? new Date(firstKickoff).toLocaleString("en-AU", { timeZone: "Australia/Sydney" })
+        : "TBC",
+      leaderboard_url: `/admin/competitions/${competitionId}`,
+    },
+  });
+}
+
+// ── Tips Closing Reminder Job ─────────────────────────────────────────────────
+/**
+ * Sends entrant_tips_closing_24h / 4h / 2h to entrants who have NOT yet
+ * submitted any tips for the round.  A single DB query finds tipped user IDs
+ * and the email is skipped for those users.
+ */
+async function processTipsClosingReminderJob(job: typeof scheduledJobs.$inferSelect): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  let payload: { roundId: number; competitionId: number } | null = null;
+  try {
+    payload = job.payload ? JSON.parse(job.payload) : null;
+  } catch {
+    throw new Error("Invalid job payload JSON");
+  }
+  if (!payload?.roundId || !payload?.competitionId) {
+    throw new Error("Missing roundId or competitionId in tips_closing job payload");
+  }
+  const { roundId, competitionId } = payload;
+  // Map job type to template key
+  const templateKeyMap: Record<string, string> = {
+    tips_closing_24h: "entrant_tips_closing_24h",
+    tips_closing_4h:  "entrant_tips_closing_4h",
+    tips_closing_2h:  "entrant_tips_closing_2h",
+  };
+  const templateKey = templateKeyMap[job.jobType];
+  if (!templateKey) return;
+  const [roundRows, compRows, tenantRows] = await Promise.all([
+    db.select().from(rounds).where(eq(rounds.id, roundId)).limit(1),
+    db.select().from(competitions).where(eq(competitions.id, competitionId)).limit(1),
+    db.select().from(tenants).where(eq(tenants.id, job.tenantId)).limit(1),
+  ]);
+  const round = roundRows[0];
+  const comp = compRows[0];
+  const tenant = tenantRows[0];
+  if (!round || !comp || !tenant) return;
+  // All active entrants for this competition
+  const allEntrants = await db
+    .select({ userId: competitionEntrants.userId })
+    .from(competitionEntrants)
+    .where(eq(competitionEntrants.competitionId, competitionId));
+  if (allEntrants.length === 0) return;
+  const allUserIds = allEntrants.map(e => e.userId);
+  // Fixture IDs for this round
+  const roundFixtures = await db
+    .select({ id: fixtures.id, startTime: fixtures.startTime })
+    .from(fixtures)
+    .where(eq(fixtures.roundId, roundId));
+  const fixtureIds = roundFixtures.map(f => f.id);
+  // Users who have already tipped at least one fixture in this round
+  const tippedRows = fixtureIds.length > 0
+    ? await db
+        .select({ userId: tips.userId })
+        .from(tips)
+        .where(and(
+          inArray(tips.fixtureId, fixtureIds),
+          inArray(tips.userId, allUserIds),
+        ))
+    : [];
+  const tippedUserIds = new Set(tippedRows.map(r => r.userId));
+  const untippedUserIds = allUserIds.filter(id => !tippedUserIds.has(id));
+  if (untippedUserIds.length === 0) return;
+  // Fetch user details for untipped entrants
+  const untippedUsers = await db
+    .select({ id: users.id, email: users.email, name: users.name })
+    .from(users)
+    .where(inArray(users.id, untippedUserIds));
+  const deadline = round.tipsCloseAt
+    ? new Date(round.tipsCloseAt).toLocaleString("en-AU", { timeZone: "Australia/Sydney" })
+    : "soon";
+  const firstKickoff = roundFixtures
+    .map(f => f.startTime)
+    .filter(Boolean)
+    .sort((a, b) => new Date(a!).getTime() - new Date(b!).getTime())[0];
+  const kickoffStr = firstKickoff
+    ? new Date(firstKickoff).toLocaleString("en-AU", { timeZone: "Australia/Sydney" })
+    : deadline;
+  for (const user of untippedUsers) {
+    if (!user.email) continue;
+    EmailService.sendEmail({
+      to: user.email,
+      templateKey,
+      tenantId: job.tenantId,
+      placeholders: {
+        user_name: user.name ?? user.email,
+        competition_name: comp.name,
+        round_number: round.roundNumber,
+        deadline,
+        first_game_time: kickoffStr,
+        tips_url: `/comp/${competitionId}`,
+      },
+    }).catch(() => { /* non-fatal */ });
+  }
+}
+
 // ── Main poll function ────────────────────────────────────────────────────────
 
 /**
@@ -246,6 +401,16 @@ export async function processScheduledJobs(): Promise<void> {
     try {
       if (job.jobType === "admin_weekly_digest") {
         await processDigestJob(job);
+      } else if (job.jobType === "admin_round_starting") {
+        await processRoundStartingJob(job);
+      } else if (
+        job.jobType === "tips_closing_24h" ||
+        job.jobType === "tips_closing_4h" ||
+        job.jobType === "tips_closing_2h"
+      ) {
+        await processTipsClosingReminderJob(job);
+      } else {
+        console.warn(`[ScheduledJobs] Unknown job type: ${job.jobType} — marking done`);
       }
       // Mark done
       await db

@@ -2,9 +2,35 @@ import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { router, tenantAdminProcedure, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
-import { rounds, competitions, competitionEntrants, users, roundReminders, tips, fixtures } from "../../drizzle/schema";
+import { rounds, competitions, competitionEntrants, users, roundReminders, tips, fixtures, scheduledJobs } from "../../drizzle/schema";
 import { notifyOwner } from "../_core/notification";
 import { EmailService } from "../services/emailService";
+
+/**
+ * Inserts scheduled_jobs rows for time-based email reminders for a round.
+ * All inserts are non-fatal (fire and forget).
+ */
+async function scheduleRoundEmailJobs(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  roundId: number,
+  competitionId: number,
+  tenantId: number,
+  tipsCloseAt: Date | null,
+): Promise<void> {
+  if (!tipsCloseAt) return;
+  const ms = tipsCloseAt.getTime();
+  const now = Date.now();
+  const jobs = [
+    { jobType: "tips_closing_24h", scheduledAt: new Date(ms - 24 * 60 * 60 * 1000) },
+    { jobType: "tips_closing_4h",  scheduledAt: new Date(ms -  4 * 60 * 60 * 1000) },
+    { jobType: "tips_closing_2h",  scheduledAt: new Date(ms -  2 * 60 * 60 * 1000) },
+  ].filter(j => j.scheduledAt.getTime() > now);
+  if (jobs.length === 0) return;
+  const payload = JSON.stringify({ roundId, competitionId });
+  await db.insert(scheduledJobs)
+    .values(jobs.map(j => ({ jobType: j.jobType, referenceId: roundId, tenantId, scheduledAt: j.scheduledAt, payload })))
+    .catch(() => { /* non-fatal */ });
+}
 
 export const roundsRouter = router({
   // List rounds for a competition
@@ -30,14 +56,24 @@ export const roundsRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
-      await db.insert(rounds).values({
+      const tipsCloseAt = input.tipsCloseAt ? new Date(input.tipsCloseAt) : null;
+      const [result] = await db.insert(rounds).values({
         competitionId: input.competitionId,
         roundNumber: input.roundNumber,
         name: input.name ?? `Round ${input.roundNumber}`,
         status: "upcoming",
         tipsOpenAt: input.tipsOpenAt ? new Date(input.tipsOpenAt) : null,
-        tipsCloseAt: input.tipsCloseAt ? new Date(input.tipsCloseAt) : null,
+        tipsCloseAt,
       });
+      // Schedule time-based reminder jobs if tipsCloseAt was provided
+      if (tipsCloseAt) {
+        const [comp] = await db.select({ tenantId: competitions.tenantId })
+          .from(competitions).where(eq(competitions.id, input.competitionId)).limit(1);
+        if (comp) {
+          const newRoundId = (result as unknown as { insertId: number }).insertId;
+          await scheduleRoundEmailJobs(db, newRoundId, input.competitionId, comp.tenantId, tipsCloseAt);
+        }
+      }
       return { success: true };
     }),
 
@@ -63,9 +99,20 @@ export const roundsRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
+      const tipsCloseAt = new Date(input.tipsCloseAt);
       await db.update(rounds)
-        .set({ tipsCloseAt: new Date(input.tipsCloseAt) })
+        .set({ tipsCloseAt })
         .where(eq(rounds.id, input.id));
+      // Fetch round's competitionId and tenant to schedule reminder jobs
+      const [round] = await db.select({ competitionId: rounds.competitionId })
+        .from(rounds).where(eq(rounds.id, input.id)).limit(1);
+      if (round) {
+        const [comp] = await db.select({ tenantId: competitions.tenantId })
+          .from(competitions).where(eq(competitions.id, round.competitionId)).limit(1);
+        if (comp) {
+          await scheduleRoundEmailJobs(db, input.id, round.competitionId, comp.tenantId, tipsCloseAt);
+        }
+      }
       return { success: true };
     }),
 
