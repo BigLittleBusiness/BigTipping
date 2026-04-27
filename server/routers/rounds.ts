@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql, count } from "drizzle-orm";
 import { router, tenantAdminProcedure, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
 import { rounds, competitions, competitionEntrants, users, roundReminders, tips, fixtures, scheduledJobs } from "../../drizzle/schema";
@@ -39,9 +39,19 @@ export const roundsRouter = router({
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) return [];
-      return db.select().from(rounds)
+      const rows = await db.select().from(rounds)
         .where(eq(rounds.competitionId, input.competitionId))
         .orderBy(rounds.roundNumber);
+      if (rows.length === 0) return [];
+      // Fetch fixture counts for all rounds in one query
+      const roundIds = rows.map(r => r.id);
+      const counts = await db
+        .select({ roundId: fixtures.roundId, fixtureCount: count(fixtures.id) })
+        .from(fixtures)
+        .where(sql`${fixtures.roundId} IN (${sql.join(roundIds.map(id => sql`${id}`), sql`, `)})`)
+        .groupBy(fixtures.roundId);
+      const countMap = new Map(counts.map(c => [c.roundId, c.fixtureCount]));
+      return rows.map(r => ({ ...r, fixtureCount: countMap.get(r.id) ?? 0 }));
     }),
 
   // Tenant admin: create round

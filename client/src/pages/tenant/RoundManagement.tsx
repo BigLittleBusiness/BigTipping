@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
   Lock, Unlock, Clock, Calendar, Trophy, ChevronRight,
-  PlayCircle, CheckCircle2, Star, ArrowRight,
+  PlayCircle, CheckCircle2, Star, ArrowRight, Layers,
 } from "lucide-react";
 
 // Status display config
@@ -309,7 +309,19 @@ export default function RoundManagement() {
                     <StatusFlow current={round.status} />
                   </div>
                   {/* Meta info */}
-                  <div className="flex gap-6 text-xs text-muted-foreground mt-1">
+                  <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mt-1">
+                    {/* Fixture count — highlighted in amber if zero */}
+                    <span className={`flex items-center gap-1 font-medium ${
+                      round.fixtureCount === 0
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-muted-foreground"
+                    }`}>
+                      <Layers size={11} />
+                      {round.fixtureCount === 0
+                        ? "No fixtures loaded"
+                        : `${round.fixtureCount} fixture${round.fixtureCount !== 1 ? "s" : ""}`
+                      }
+                    </span>
                     {round.tipsCloseAt && (
                       <span className="flex items-center gap-1">
                         <Clock size={11} />
@@ -319,7 +331,7 @@ export default function RoundManagement() {
                     {round.tieBreakerFixtureId && (
                       <span className="flex items-center gap-1">
                         <Trophy size={11} />
-                        Tie-breaker fixture set
+                        Tie-breaker set
                       </span>
                     )}
                   </div>

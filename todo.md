@@ -310,3 +310,7 @@
 - [x] Add "Mark Scored" button for locked rounds (locked → scored)
 - [x] Add "Complete" button for scored rounds (scored → completed)
 - [x] Show status flow indicator on each round card so admins understand the progression
+
+## Phase 25: Fixture Count on Round Cards
+
+- [x] Add fixture count to each round card on the Round Management page
