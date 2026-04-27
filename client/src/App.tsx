@@ -34,6 +34,13 @@ import TenantCompetitions from "./pages/tenant/Competitions";
 import CompetitionDetail from "./pages/tenant/CompetitionDetail";
 import RoundResults from "./pages/tenant/RoundResults";
 import EmailSettings from "./pages/tenant/EmailSettings";
+import CompetitionDashboard from "./pages/tenant/CompetitionDashboard";
+import EntrantsManagement from "./pages/tenant/EntrantsManagement";
+import CompetitionSetup from "./pages/tenant/CompetitionSetup";
+import ScoringRules from "./pages/tenant/ScoringRules";
+import RoundManagement from "./pages/tenant/RoundManagement";
+import PrizesManagement from "./pages/tenant/PrizesManagement";
+import AccountSubscription from "./pages/tenant/AccountSubscription";
 
 // Entrant pages
 import MyCompetitions from "./pages/entrant/MyCompetitions";
@@ -100,6 +107,13 @@ function Router() {
       <Route path="/tenant/competitions/:id" component={CompetitionDetail} />
       <Route path="/tenant/competitions/:compId/results/:roundId" component={RoundResults} />
       <Route path="/tenant/email-settings" component={EmailSettings} />
+      <Route path="/tenant/competition-dashboard" component={CompetitionDashboard} />
+      <Route path="/tenant/entrants" component={EntrantsManagement} />
+      <Route path="/tenant/setup" component={CompetitionSetup} />
+      <Route path="/tenant/scoring-rules" component={ScoringRules} />
+      <Route path="/tenant/rounds" component={RoundManagement} />
+      <Route path="/tenant/prizes" component={PrizesManagement} />
+      <Route path="/tenant/account" component={AccountSubscription} />
 
       {/* Entrant */}
       <Route path="/my-competitions" component={MyCompetitions} />

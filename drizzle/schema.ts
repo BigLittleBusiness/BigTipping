@@ -23,6 +23,7 @@ export const users = mysqlTable("users", {
   createdAt:   timestamp("createdAt").defaultNow().notNull(),
   updatedAt:   timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  mobile:       varchar("mobile", { length: 20 }),
 });
 
 export type User = typeof users.$inferSelect;
@@ -109,8 +110,9 @@ export const rounds = mysqlTable("rounds", {
   status:          mysqlEnum("status", ["upcoming", "open", "closed", "scored"]).default("upcoming").notNull(),
   tipsOpenAt:      timestamp("tipsOpenAt"),
   tipsCloseAt:     timestamp("tipsCloseAt"),
-  scoringCompleted: boolean("scoringCompleted").default(false).notNull(),
-  scoredAt:        timestamp("scoredAt"),
+  scoringCompleted:     boolean("scoringCompleted").default(false).notNull(),
+  scoredAt:             timestamp("scoredAt"),
+  tieBreakerFixtureId:  int("tieBreakerFixtureId"),
   createdAt:       timestamp("createdAt").defaultNow().notNull(),
   updatedAt:       timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => [
@@ -338,3 +340,78 @@ export const scheduledJobs = mysqlTable("scheduled_jobs", {
 ]);
 export type ScheduledJob = typeof scheduledJobs.$inferSelect;
 export type InsertScheduledJob = typeof scheduledJobs.$inferInsert;
+// ── Competition Branding ──────────────────────────────────────────────────────
+export const competitionBranding = mysqlTable("competition_branding", {
+  id:              int("id").autoincrement().primaryKey(),
+  competitionId:   int("competitionId").notNull().unique(),
+  fontColour:      varchar("fontColour", { length: 20 }).default("#1a1a1a").notNull(),
+  fontType:        varchar("fontType", { length: 100 }).default("Inter").notNull(),
+  bgColour:        varchar("bgColour", { length: 20 }).default("#ffffff").notNull(),
+  bgImageUrl:      text("bgImageUrl"),
+  bgImageMode:     mysqlEnum("bgImageMode", ["centred", "full_width", "tile"]).default("full_width"),
+  landingPageText: text("landingPageText"),
+  updatedAt:       timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CompetitionBranding = typeof competitionBranding.$inferSelect;
+export type InsertCompetitionBranding = typeof competitionBranding.$inferInsert;
+// ── Prize Rules ───────────────────────────────────────────────────────────────
+export const prizeRules = mysqlTable("prize_rules", {
+  id:                  int("id").autoincrement().primaryKey(),
+  competitionId:       int("competitionId").notNull().unique(),
+  weeklyWinCondition:  mysqlEnum("weeklyWinCondition", ["all_correct", "highest_score", "highest_score_margin"]).default("highest_score").notNull(),
+  seasonWinCondition:  mysqlEnum("seasonWinCondition", ["highest_score", "highest_score_margin", "highest_score_head_to_head"]).default("highest_score").notNull(),
+  updatedAt:           timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PrizeRule = typeof prizeRules.$inferSelect;
+export type InsertPrizeRule = typeof prizeRules.$inferInsert;
+// ── Prize Places ──────────────────────────────────────────────────────────────
+export const prizePlaces = mysqlTable("prize_places", {
+  id:           int("id").autoincrement().primaryKey(),
+  prizeId:      int("prizeId").notNull(),
+  place:        int("place").notNull(),           // 1 = 1st, 2 = 2nd, etc.
+  name:         varchar("name", { length: 255 }).notNull(),
+  value:        varchar("value", { length: 100 }),
+  description:  text("description"),
+  createdAt:    timestamp("createdAt").defaultNow().notNull(),
+}, (t) => [
+  index("pp_prizeId_idx").on(t.prizeId),
+]);
+export type PrizePlace = typeof prizePlaces.$inferSelect;
+export type InsertPrizePlace = typeof prizePlaces.$inferInsert;
+// ── Subscriptions ─────────────────────────────────────────────────────────────
+export const subscriptions = mysqlTable("subscriptions", {
+  id:                     int("id").autoincrement().primaryKey(),
+  tenantId:               int("tenantId").notNull().unique(),
+  level:                  varchar("level", { length: 50 }).default("Basic").notNull(),
+  paymentTerm:            mysqlEnum("paymentTerm", ["monthly", "annually"]).default("monthly").notNull(),
+  paymentMethod:          mysqlEnum("paymentMethod", ["credit_card", "invoice"]).default("invoice").notNull(),
+  cardLast4:              varchar("cardLast4", { length: 4 }),
+  cardBrand:              varchar("cardBrand", { length: 20 }),
+  invoiceRecipientName:   varchar("invoiceRecipientName", { length: 255 }),
+  invoiceRecipientEmail:  varchar("invoiceRecipientEmail", { length: 320 }),
+  invoicePONumber:        varchar("invoicePONumber", { length: 100 }),
+  orgName:                varchar("orgName", { length: 255 }),
+  orgABN:                 varchar("orgABN", { length: 20 }),
+  orgAddress:             text("orgAddress"),
+  orgPhone:               varchar("orgPhone", { length: 20 }),
+  createdAt:              timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:              timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertSubscription = typeof subscriptions.$inferInsert;
+// ── Billing History ───────────────────────────────────────────────────────────
+export const billingHistory = mysqlTable("billing_history", {
+  id:          int("id").autoincrement().primaryKey(),
+  tenantId:    int("tenantId").notNull(),
+  date:        timestamp("date").notNull(),
+  amount:      int("amount").notNull(),           // cents
+  currency:    varchar("currency", { length: 3 }).default("AUD").notNull(),
+  status:      mysqlEnum("status", ["paid", "pending", "failed", "refunded"]).default("pending").notNull(),
+  description: varchar("description", { length: 255 }),
+  invoiceUrl:  text("invoiceUrl"),
+  createdAt:   timestamp("createdAt").defaultNow().notNull(),
+}, (t) => [
+  index("bh_tenantId_idx").on(t.tenantId),
+]);
+export type BillingRecord = typeof billingHistory.$inferSelect;
+export type InsertBillingRecord = typeof billingHistory.$inferInsert;

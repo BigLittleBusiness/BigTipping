@@ -52,7 +52,8 @@ export default function CompetitionDetail() {
   const { data: rounds, refetch: refetchRounds } = trpc.rounds.list.useQuery({ competitionId: compId });
   const { data: leaderboard } = trpc.leaderboard.get.useQuery({ competitionId: compId });
   const { data: prizes, refetch: refetchPrizes } = trpc.prizes.list.useQuery({ competitionId: compId });
-  const { data: entrants } = trpc.competitions.listEntrants.useQuery({ competitionId: compId });
+  const { data: entrantsData } = trpc.competitions.listEntrants.useQuery({ competitionId: compId });
+  const entrants = entrantsData?.rows ?? [];
 
   const createRound = trpc.rounds.create.useMutation({ onSuccess: () => { refetchRounds(); setRoundOpen(false); toast.success("Round created"); } });
   const setRoundStatus = trpc.rounds.setStatus.useMutation({ onSuccess: () => { refetchRounds(); toast.success("Round updated"); } });

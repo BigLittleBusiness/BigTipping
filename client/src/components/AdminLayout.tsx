@@ -3,7 +3,7 @@ import { getLoginUrl } from "@/const";
 import { cn } from "@/lib/utils";
 import {
   BarChart3, Building2, CalendarClock, ChevronRight, Layers, LogOut,
-  Mail, Settings, Shield, Trophy, Users, Zap
+  Mail, Settings, Shield, Trophy, Users, Zap, Sliders, ListOrdered, CreditCard
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -27,7 +27,11 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Competitions",      href: "/tenant/competitions",icon: <Trophy size={18} />,   roles: ["tenant_admin"] },
   { label: "Entrants",          href: "/tenant/entrants",   icon: <Users size={18} />,     roles: ["tenant_admin"] },
   { label: "Prizes",            href: "/tenant/prizes",     icon: <Trophy size={18} />,    roles: ["tenant_admin"] },
-  { label: "Email Settings",    href: "/tenant/email-settings", icon: <Mail size={18} />,   roles: ["tenant_admin"] },
+  { label: "Round Management",  href: "/tenant/rounds",         icon: <ListOrdered size={18} />, roles: ["tenant_admin"] },
+  { label: "Setup",             href: "/tenant/setup",          icon: <Settings size={18} />,   roles: ["tenant_admin"] },
+  { label: "Scoring Rules",     href: "/tenant/scoring-rules",  icon: <Sliders size={18} />,    roles: ["tenant_admin"] },
+  { label: "Email Settings",    href: "/tenant/email-settings", icon: <Mail size={18} />,       roles: ["tenant_admin"] },
+  { label: "Account",           href: "/tenant/account",        icon: <CreditCard size={18} />, roles: ["tenant_admin"] },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

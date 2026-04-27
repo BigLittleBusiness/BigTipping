@@ -366,4 +366,46 @@ export const roundsRouter = router({
       };
     }),
 
+  // Tenant admin: set the tie-breaker fixture for a round
+  setTieBreaker: tenantAdminProcedure
+    .input(z.object({
+      roundId: z.number(),
+      fixtureId: z.number(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const tenantId = ctx.user.tenantId;
+      if (!tenantId) throw new Error("No tenant assigned");
+      const [round] = await db
+        .select({ id: rounds.id, competitionId: rounds.competitionId })
+        .from(rounds)
+        .where(eq(rounds.id, input.roundId))
+        .limit(1);
+      if (!round) throw new Error("Round not found");
+      const [comp] = await db
+        .select({ id: competitions.id })
+        .from(competitions)
+        .where(and(eq(competitions.id, round.competitionId), eq(competitions.tenantId, tenantId)))
+        .limit(1);
+      if (!comp) throw new Error("Competition not found or access denied");
+      await db.update(rounds)
+        .set({ tieBreakerFixtureId: input.fixtureId })
+        .where(eq(rounds.id, input.roundId));
+      return { success: true };
+    }),
+
+  // Tenant admin: get all fixtures for a round
+  getFixtures: tenantAdminProcedure
+    .input(z.object({ roundId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      return db
+        .select()
+        .from(fixtures)
+        .where(eq(fixtures.roundId, input.roundId))
+        .orderBy(fixtures.startTime);
+    }),
+
 });

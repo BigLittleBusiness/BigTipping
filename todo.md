@@ -249,3 +249,50 @@
 
 ### Tests
 - [x] TypeScript clean (0 errors), 167 tests passing across 8 test files
+## Phase 22: Competition Admin — Full Feature Build
+
+### Schema
+- [x] Add `mobile` field to users table
+- [x] Add `tieBreakerFixtureId` to rounds table
+- [x] Add `competitionBranding` table (fontColour, fontType, bgColour, bgImageUrl, bgImageMode, landingPageText)
+- [x] Expand `scoringRules` JSON on competitions: incorrectTipPoints, bonusMarginCorrect, defaultScoreForUntipped, defaultMarginValue, jokerRoundEnabled, jokerRoundId, jokerMultiplier
+- [x] Add `prizeRules` table (competitionId, weeklyWinCondition, seasonWinCondition)
+- [x] Add `prizePlaces` table (prizeId, place, name, value, description)
+- [x] Add `subscriptions` table (tenantId, level, paymentTerm, paymentMethod, cardLast4, invoiceRecipientName, invoiceRecipientEmail, invoicePONumber)
+- [x] Add `billingHistory` table (tenantId, date, amount, status, invoiceUrl)
+- [x] Generate and apply migration
+
+### Backend tRPC Procedures
+- [x] `competitions.dashboardStats` — entrant count, tips submitted for current round, top-5 leaderboard, recent activity, alerts
+- [x] `competitions.updateEntrant` — update name, email, mobile
+- [x] `competitions.removeEntrant` — single delete
+- [x] `competitions.bulkRemoveEntrants` — bulk delete by userId array
+- [x] `competitions.bulkImportEntrants` — accept CSV rows, queue invite jobs, return summary
+- [x] `competitions.resendInvite` — resend invite email for an entrant
+- [x] `competitions.getEntrantTips` — all rounds + selections for a given entrant (read-only)
+- [x] `competitions.updateBranding` — upsert competitionBranding row
+- [x] `competitions.getBranding` — get branding for a competition
+- [x] `competitions.updateScoringRules` — update full scoring rules JSON on competition
+- [x] `rounds.setTieBreaker` — set tieBreakerFixtureId on a round
+- [x] `rounds.lock` / `rounds.unlock` — manual override of round status
+- [x] `rounds.getFixtures` — list fixtures for a round (read-only for tenant admin)
+- [x] `prizes.updateRules` — upsert prizeRules row
+- [x] `prizes.getRules` — get prizeRules for a competition
+- [x] `prizes.addPlace` — add a prizePlaces row
+- [x] `prizes.updatePlace` — update a prizePlaces row
+- [x] `prizes.removePlace` — delete a prizePlaces row
+- [x] `prizes.calculateAndAward` — calculate winners based on rules, log awards
+- [x] `account.get` — get tenant + subscription info
+- [x] `account.update` — update org name, ABN, address, contact details
+- [x] `account.updateSubscription` — update payment method, invoice details
+- [x] `account.getBillingHistory` — list billing history rows
+
+### Frontend Pages
+- [x] `/tenant/dashboard` — enhance: competition selector, entrant count, tips submitted, top-5 leaderboard, activity feed, alerts
+- [x] `/tenant/entrants` — dedicated page: paginated list, search, add single, bulk CSV import, edit, delete, resend invite, view tips modal
+- [x] `/tenant/setup` — Competition Setup: branding (font colour, font type, bg colour, bg image, landing page text)
+- [x] `/tenant/scoring` — Scoring Rules: all fields + joker round toggle + default score/margin
+- [x] `/tenant/rounds` — Round Management: list, edit deadline, set tie-breaker, lock/unlock, view fixtures
+- [x] `/tenant/prizes` — Prizes: prize rules (weekly/season win conditions), place definitions, manual award
+- [x] `/tenant/account` — Account & Subscription: org details, subscription info, payment method, billing history
+- [x] Add all new routes to App.tsx and nav items to AdminLayout
