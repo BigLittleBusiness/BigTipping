@@ -27,6 +27,7 @@ import AdminOverview from "./pages/admin/Overview";
 import AdminTenants from "./pages/admin/Tenants";
 import AdminSports from "./pages/admin/Sports";
 import FixtureManager from "./pages/admin/FixtureManager";
+import ApiConfig from "./pages/admin/ApiConfig";
 
 // Tenant Admin pages
 import TenantDashboard from "./pages/tenant/Dashboard";
@@ -100,6 +101,7 @@ function Router() {
       <Route path="/admin/tenants" component={AdminTenants} />
       <Route path="/admin/sports" component={AdminSports} />
       <Route path="/admin/fixtures" component={FixtureManager} />
+      <Route path="/admin/api-config" component={ApiConfig} />
 
       {/* Tenant Admin */}
       <Route path="/tenant/dashboard" component={TenantDashboard} />

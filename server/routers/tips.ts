@@ -3,7 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { router, entrantProcedure } from "../_core/trpc";
 import { getDb } from "../db";
-import { tips, fixtures, teams, rounds } from "../../drizzle/schema";
+import { tips, fixtures, teams, rounds, competitions } from "../../drizzle/schema";
 
 export const tipsRouter = router({
   // Submit or update a tip (pickedTeamId is null for draw tips)
@@ -13,6 +13,8 @@ export const tipsRouter = router({
       competitionId: z.number(),
       pickedTeamId: z.number().nullable().optional(),
       isDraw: z.boolean().optional().default(false),
+      tieBreakerValue: z.number().int().optional().nullable(),
+      useJoker: z.boolean().optional().default(false),
     }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -49,38 +51,55 @@ export const tipsRouter = router({
       const pickedTeamId = input.isDraw ? null : (input.pickedTeamId ?? null);
       const isDraw = input.isDraw ?? false;
 
+      const tieBreakerValue = input.tieBreakerValue ?? null;
+      const useJoker = input.useJoker ?? false;
+
       await db.insert(tips).values({
         userId: ctx.user.id,
         fixtureId: input.fixtureId,
         competitionId: input.competitionId,
         pickedTeamId,
         isDraw,
+        tieBreakerValue,
+        useJoker,
         isCorrect: null,
         pointsEarned: 0,
       }).onDuplicateKeyUpdate({
-        set: { pickedTeamId, isDraw, isCorrect: null, pointsEarned: 0 },
+        set: { pickedTeamId, isDraw, tieBreakerValue, useJoker, isCorrect: null, pointsEarned: 0 },
       });
       return { success: true };
     }),
 
-  // Get my tips for a round
+  // Get my tips for a round (includes bye teams inferred from sport)
   myRoundTips: entrantProcedure
     .input(z.object({ roundId: z.number(), competitionId: z.number() }))
     .query(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) return [];
+      if (!db) return { fixtures: [], byeTeams: [] };
+      // Get the competition to find the sport
+      const [comp] = await db.select({ sportId: competitions.sportId })
+        .from(competitions).where(eq(competitions.id, input.competitionId)).limit(1);
       // Get fixtures for the round
       const roundFixtures = await db.select().from(fixtures).where(eq(fixtures.roundId, input.roundId));
-      const fixtureIds = roundFixtures.map(f => f.id);
-      if (!fixtureIds.length) return [];
+      // Get all active teams for this sport
+      const sportTeams = comp
+        ? await db.select().from(teams).where(and(eq(teams.sportId, comp.sportId), eq(teams.isActive, true)))
+        : [];
+      const teamMap = Object.fromEntries(sportTeams.map(t => [t.id, t]));
+      // Determine bye teams: active sport teams not in any fixture this round
+      const playingTeamIds = new Set<number>();
+      for (const f of roundFixtures) {
+        playingTeamIds.add(f.homeTeamId);
+        playingTeamIds.add(f.awayTeamId);
+      }
+      const byeTeams = sportTeams.filter(t => !playingTeamIds.has(t.id));
+      if (!roundFixtures.length) return { fixtures: [], byeTeams };
       // Get my tips for those fixtures
       const myTips = await db.select().from(tips).where(
         and(eq(tips.userId, ctx.user.id), eq(tips.competitionId, input.competitionId))
       );
       const tipMap = Object.fromEntries(myTips.map(t => [t.fixtureId, t]));
-      const allTeams = await db.select().from(teams);
-      const teamMap = Object.fromEntries(allTeams.map(t => [t.id, t]));
-      return roundFixtures.map(f => ({
+      const fixtureRows = roundFixtures.map(f => ({
         fixture: {
           ...f,
           homeTeam: teamMap[f.homeTeamId] ?? null,
@@ -90,6 +109,7 @@ export const tipsRouter = router({
         tip: tipMap[f.id] ?? null,
         pickedTeam: tipMap[f.id]?.pickedTeamId != null ? teamMap[tipMap[f.id]!.pickedTeamId!] ?? null : null,
       }));
+      return { fixtures: fixtureRows, byeTeams };
     }),
 
   // Get my summary stats for a specific round (correct count, total, points earned)

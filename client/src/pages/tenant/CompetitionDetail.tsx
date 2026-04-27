@@ -84,7 +84,7 @@ export default function CompetitionDetail() {
   const [sportIdForTeams, setSportIdForTeams] = useState<number | null>(comp?.sportId ?? null);
   const { data: teams } = trpc.sports.listTeams.useQuery({ sportId: comp?.sportId ?? 0 }, { enabled: !!comp?.sportId });
   const createFixture = trpc.fixtures.create.useMutation({ onSuccess: () => { refetchFixtures(); setFixOpen(false); toast.success("Fixture added"); } });
-  const enterResult = trpc.fixtures.enterResult.useMutation({ onSuccess: () => { refetchFixtures(); toast.success("Result entered"); } });
+  const enterResult = trpc.fixtures.enterScores.useMutation({ onSuccess: () => { refetchFixtures(); toast.success("Result entered"); } });
   const [resultFixId, setResultFixId] = useState<number | null>(null);
   const [resultForm, setResultForm] = useState({ homeScore: "", awayScore: "", winnerId: "" });
 
@@ -264,7 +264,7 @@ export default function CompetitionDetail() {
                                     </SelectContent>
                                   </Select>
                                   <Button size="sm" className="h-7 text-xs" onClick={() => {
-                                    enterResult.mutate({ id: f.id, homeScore: Number(resultForm.homeScore), awayScore: Number(resultForm.awayScore), winnerId: resultForm.winnerId === "0" ? null : Number(resultForm.winnerId) });
+                                    enterResult.mutate({ id: f.id, homeScore: Number(resultForm.homeScore), awayScore: Number(resultForm.awayScore) });
                                     setResultFixId(null);
                                   }}>Save</Button>
                                 </div>

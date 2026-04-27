@@ -296,66 +296,96 @@ export const fixturesRouter = router({
       return { success: true };
     }),
 
-  // Enter result
-  enterResult: tenantAdminProcedure
+  // Enter scores for a fixture (supports partial saves; auto-finalises round when all scored)
+  // AFL: supply homeGoals/homeBehinds/awayGoals/awayBehinds for informational storage;
+  //      homeScore/awayScore (totals) drive all calculations.
+  // NRL/Netball: only homeScore/awayScore required.
+  // Winner is auto-determined: equal scores = draw (winnerId = null).
+  enterScores: tenantAdminProcedure
     .input(z.object({
       id: z.number(),
       homeScore: z.number(),
       awayScore: z.number(),
-      winnerId: z.number().nullable(),
-      margin: z.number().optional(),
+      homeGoals:   z.number().nullable().optional(),
+      homeBehinds: z.number().nullable().optional(),
+      awayGoals:   z.number().nullable().optional(),
+      awayBehinds: z.number().nullable().optional(),
     }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
+
+      // Fetch the fixture to get team IDs for winner determination
+      const [existing] = await db.select({ homeTeamId: fixtures.homeTeamId, awayTeamId: fixtures.awayTeamId, roundId: fixtures.roundId })
+        .from(fixtures).where(eq(fixtures.id, input.id)).limit(1);
+      if (!existing) throw new Error("Fixture not found");
+
+      // Auto-determine winner from scores (null = draw)
+      const winnerId = input.homeScore === input.awayScore
+        ? null
+        : input.homeScore > input.awayScore
+          ? existing.homeTeamId
+          : existing.awayTeamId;
+
       await db.update(fixtures).set({
-        homeScore: input.homeScore,
-        awayScore: input.awayScore,
-        winnerId: input.winnerId,
-        margin: input.margin ?? Math.abs(input.homeScore - input.awayScore),
-        status: "completed",
+        homeScore:   input.homeScore,
+        awayScore:   input.awayScore,
+        homeGoals:   input.homeGoals   ?? null,
+        homeBehinds: input.homeBehinds ?? null,
+        awayGoals:   input.awayGoals   ?? null,
+        awayBehinds: input.awayBehinds ?? null,
+        winnerId,
+        margin:  Math.abs(input.homeScore - input.awayScore),
+        status:  "completed",
       }).where(eq(fixtures.id, input.id));
 
+      // Auto-finalise round when every fixture in the round has scores
+      // Re-fetch after update to get current state of all fixtures
+      const freshFixtures = await db.select().from(fixtures).where(eq(fixtures.roundId, existing.roundId));
+      const allScored = freshFixtures.length > 0 &&
+        freshFixtures.every(f => f.homeScore !== null && f.awayScore !== null);
+      if (allScored) {
+        await db.update(rounds)
+          .set({ status: "scored", scoringCompleted: true, scoredAt: new Date() })
+          .where(eq(rounds.id, existing.roundId));
+      }
+
       // Send admin_draw_match email when the result is a draw
-      if (input.winnerId === null && input.homeScore === input.awayScore) {
-        const [fixture] = await db.select({ roundId: fixtures.roundId, homeTeamId: fixtures.homeTeamId, awayTeamId: fixtures.awayTeamId })
-          .from(fixtures).where(eq(fixtures.id, input.id)).limit(1);
-        if (fixture) {
-          const [round] = await db.select({ competitionId: rounds.competitionId, roundNumber: rounds.roundNumber, name: rounds.name })
-            .from(rounds).where(eq(rounds.id, fixture.roundId)).limit(1);
-          if (round) {
-            const [comp] = await db.select({ tenantId: competitions.tenantId, name: competitions.name })
-              .from(competitions).where(eq(competitions.id, round.competitionId)).limit(1);
-            if (comp) {
-              const [tenant] = await db.select({ contactEmail: tenants.contactEmail, name: tenants.name })
-                .from(tenants).where(eq(tenants.id, comp.tenantId)).limit(1);
-              if (tenant?.contactEmail) {
-                const allTeams = await db.select().from(teams);
-                const teamMap = Object.fromEntries(allTeams.map(t => [t.id, t]));
-                const homeTeam = teamMap[fixture.homeTeamId]?.name ?? "Home";
-                const awayTeam = teamMap[fixture.awayTeamId]?.name ?? "Away";
-                EmailService.sendEmail({
-                  to: tenant.contactEmail,
-                  templateKey: "admin_draw_match",
-                  tenantId: comp.tenantId,
-                  transactional: true,
-                  placeholders: {
-                    user_name: tenant.name ?? "Admin",
-                    competition_name: comp.name,
-                    round_number: round.roundNumber,
-                    round_name: round.name ?? `Round ${round.roundNumber}`,
-                    home_team: homeTeam,
-                    away_team: awayTeam,
-                    score: `${input.homeScore}–${input.awayScore}`,
-                    leaderboard_url: `/admin/competitions/${round.competitionId}`,
-                  },
-                }).catch(() => { /* non-fatal */ });
-              }
+      if (winnerId === null) {
+        const [round] = await db.select({ competitionId: rounds.competitionId, roundNumber: rounds.roundNumber, name: rounds.name })
+          .from(rounds).where(eq(rounds.id, existing.roundId)).limit(1);
+        if (round) {
+          const [comp] = await db.select({ tenantId: competitions.tenantId, name: competitions.name })
+            .from(competitions).where(eq(competitions.id, round.competitionId)).limit(1);
+          if (comp) {
+            const [tenant] = await db.select({ contactEmail: tenants.contactEmail, name: tenants.name })
+              .from(tenants).where(eq(tenants.id, comp.tenantId)).limit(1);
+            if (tenant?.contactEmail) {
+              const allTeams = await db.select().from(teams);
+              const teamMap = Object.fromEntries(allTeams.map(t => [t.id, t]));
+              const homeTeam = teamMap[existing.homeTeamId]?.name ?? "Home";
+              const awayTeam = teamMap[existing.awayTeamId]?.name ?? "Away";
+              EmailService.sendEmail({
+                to: tenant.contactEmail,
+                templateKey: "admin_draw_match",
+                tenantId: comp.tenantId,
+                transactional: true,
+                placeholders: {
+                  user_name: tenant.name ?? "Admin",
+                  competition_name: comp.name,
+                  round_number: round.roundNumber,
+                  round_name: round.name ?? `Round ${round.roundNumber}`,
+                  home_team: homeTeam,
+                  away_team: awayTeam,
+                  score: `${input.homeScore}–${input.awayScore}`,
+                  leaderboard_url: `/admin/competitions/${round.competitionId}`,
+                },
+              }).catch(() => { /* non-fatal */ });
             }
           }
         }
       }
-      return { success: true };
+      return { success: true, autoFinalised: allScored };
     }),
 
   // Tenant admin: update a fixture's start time (reschedules admin_round_starting job only)

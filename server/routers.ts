@@ -16,6 +16,7 @@ import { contactRouter } from "./routers/contact.ts";
 import { invitesRouter } from "./routers/invites.ts";
 import { emailRouter } from "./routers/email.ts";
 import { accountRouter } from "./routers/account.ts";
+import { sportApiConfigsRouter } from "./routers/sportApiConfigs.ts";
 
 export const appRouter = router({
   system: systemRouter,
@@ -41,6 +42,7 @@ export const appRouter = router({
   invites:      invitesRouter,
   email:        emailRouter,
   account:      accountRouter,
+  sportApiConfigs: sportApiConfigsRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -347,3 +347,39 @@
 - [x] Add allowDraw checkbox to Competition Setup page (default off, saves via competitions.updateSettings mutation)
 - [x] Enhance round-by-round breakdown: show tipped team per fixture inline with tooltip for full match detail
 - [x] Add season accuracy bar chart to My Position stats card (colour-coded by accuracy %, collapsible)
+
+## Phase 31: Result Entry Scores, Partial Scoring, Tie-Breaker, Joker, Byes, API Config
+
+### Schema
+- [x] Add score fields to fixtures table: homeGoals, homeBehinds, homeScore, awayGoals, awayBehinds, awayScore (all nullable integers)
+- [x] Add tieBreakerValue (nullable integer) to tips table for entrant tie-breaker entry
+- [x] Add jokerRoundId and jokerMultiplier to competitions table (already in scoringRules JSON — confirm if separate columns needed)
+- [x] Add useJoker boolean to tips table (per-round joker toggle per entrant)
+- [x] Add sport_api_configs table (sportId, tenantId, providerName, baseUrl, apiKey, endpointFixtures, endpointResults, isActive)
+- [x] Generate and apply migration for all schema changes
+
+### Backend
+- [x] fixtures.enterScores mutation: accept homeScore/awayScore (+ optional goals/behinds for AFL), set winnerId based on scores (null if equal = draw), partial save supported
+- [x] leaderboard.scoreRound: update to score only fixtures that have scores entered (partial round scoring), recalculate leaderboard entries
+- [x] Auto-finalise round: after enterScores, check if all fixtures in round have scores — if yes, set round.status = 'scored' automatically
+- [x] tips.submit: accept optional tieBreakerValue and useJoker fields
+- [x] Joker multiplier: when useJoker=true and jokerRoundEnabled, multiply points earned by jokerMultiplier for that round
+- [x] systemAdmin.getApiConfigs / systemAdmin.upsertApiConfig / systemAdmin.deleteApiConfig procedures
+
+### Result Entry Screen (Admin)
+- [x] Redesign RoundResults page: show each fixture as a row with Home Team | Goals | Behinds | Total — Away Team | Goals | Behinds | Total (AFL only shows goals/behinds; NRL/Netball show total only)
+- [x] Tab order: Home Total → Away Total → next fixture Home Total → Away Total (goals/behinds are secondary, not in tab order)
+- [x] Tie-breaker fixture visually labelled (e.g. "Tie-Breaker" badge)
+- [x] Save Partial Results button: saves entered scores, triggers partial leaderboard recalculation
+- [x] Auto-finalise indicator: show "Round will auto-finalise when all scores are entered" message
+- [x] Draw detection: display "Draw" badge on fixture row when both scores are equal after entry
+
+### Tip Entry Screen (Entrant)
+- [x] Tie-breaker fixture: show a numeric input field to the right of the fixture card when round has a tieBreakerFixtureId
+- [x] Joker round toggle: show "Use Joker this round" toggle (No/Yes) at top of round when jokerRoundEnabled=true on competition
+- [x] Bye teams section: infer bye teams by comparing all competition teams against teams in round fixtures; display under "Teams with a bye" sub-heading (sport-agnostic, works for any code)
+
+### System Admin — API Configuration
+- [x] New /admin/api-config page: list of sports with their API configuration
+- [x] Per-sport form: Provider Name, Base URL, API Key (masked), Fixtures Endpoint, Results Endpoint, Active toggle
+- [x] Add nav link to System Admin sidebar

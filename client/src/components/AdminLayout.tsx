@@ -3,7 +3,7 @@ import { getLoginUrl } from "@/const";
 import { cn } from "@/lib/utils";
 import {
   BarChart3, Building2, CalendarClock, ChevronRight, Layers, LogOut,
-  Mail, Settings, Shield, Trophy, Users, Zap, Sliders, ListOrdered, CreditCard
+  Mail, Plug, Settings, Shield, Trophy, Users, Zap, Sliders, ListOrdered, CreditCard
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -22,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Tenants",           href: "/admin/tenants",     icon: <Building2 size={18} />, roles: ["system_admin"] },
   { label: "Sports & Teams",    href: "/admin/sports",      icon: <Zap size={18} />,       roles: ["system_admin"] },
   { label: "Fixture Manager",   href: "/admin/fixtures",    icon: <CalendarClock size={18} />, roles: ["system_admin"] },
+  { label: "API Config",         href: "/admin/api-config",  icon: <Plug size={18} />,          roles: ["system_admin"] },
   // Tenant Admin
   { label: "Dashboard",         href: "/tenant/dashboard",  icon: <Layers size={18} />,    roles: ["tenant_admin"] },
   { label: "Competitions",      href: "/tenant/competitions",icon: <Trophy size={18} />,   roles: ["tenant_admin"] },

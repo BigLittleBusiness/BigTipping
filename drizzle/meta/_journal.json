@@ -78,6 +78,13 @@
       "when": 1777282624655,
       "tag": "0010_gifted_doomsday",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1777290528176,
+      "tag": "0011_bitter_nicolaos",
+      "breakpoints": true
     }
   ]
 }

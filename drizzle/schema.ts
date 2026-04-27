@@ -88,7 +88,10 @@ export const competitions = mysqlTable("competitions", {
   startDate:   timestamp("startDate"),
   endDate:     timestamp("endDate"),
   isPublic:     boolean("isPublic").default(true).notNull(),
-  allowDraw:    boolean("allowDraw").default(false).notNull(),
+  allowDraw:          boolean("allowDraw").default(false).notNull(),
+  jokerRoundEnabled:  boolean("jokerRoundEnabled").default(false).notNull(),
+  jokerRoundId:       int("jokerRoundId"),   // which round is the joker round (null = any round)
+  jokerMultiplier:    int("jokerMultiplier").default(2).notNull(), // points multiplier when joker used
   inviteToken:  varchar("inviteToken", { length: 64 }).unique(),
   inviteEnabled: boolean("inviteEnabled").default(true).notNull(),
   createdAt:    timestamp("createdAt").defaultNow().notNull(),
@@ -135,6 +138,10 @@ export const fixtures = mysqlTable("fixtures", {
   status:     mysqlEnum("status", ["scheduled", "in_progress", "completed", "cancelled"]).default("scheduled").notNull(),
   homeScore:  int("homeScore"),
   awayScore:  int("awayScore"),
+  homeGoals:  int("homeGoals"),   // AFL only — informational
+  homeBehinds: int("homeBehinds"), // AFL only — informational
+  awayGoals:  int("awayGoals"),   // AFL only — informational
+  awayBehinds: int("awayBehinds"), // AFL only — informational
   winnerId:   int("winnerId"),   // null = draw / not yet played
   margin:     int("margin"),
   createdAt:  timestamp("createdAt").defaultNow().notNull(),
@@ -150,10 +157,12 @@ export const tips = mysqlTable("tips", {
   userId:        int("userId").notNull(),
   fixtureId:     int("fixtureId").notNull(),
   competitionId: int("competitionId").notNull(),
-  pickedTeamId:  int("pickedTeamId"),    // null = draw tip
-  isDraw:        boolean("isDraw").default(false).notNull(),
-  isCorrect:     boolean("isCorrect"),   // null = not yet scored
-  pointsEarned:  int("pointsEarned").default(0).notNull(),
+  pickedTeamId:    int("pickedTeamId"),    // null = draw tip
+  isDraw:          boolean("isDraw").default(false).notNull(),
+  isCorrect:       boolean("isCorrect"),   // null = not yet scored
+  pointsEarned:    int("pointsEarned").default(0).notNull(),
+  tieBreakerValue: int("tieBreakerValue"),  // entrant's tie-breaker prediction
+  useJoker:        boolean("useJoker").default(false).notNull(), // entrant joker toggle for this round
   createdAt:     timestamp("createdAt").defaultNow().notNull(),
   updatedAt:     timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => [
@@ -417,3 +426,22 @@ export const billingHistory = mysqlTable("billing_history", {
 ]);
 export type BillingRecord = typeof billingHistory.$inferSelect;
 export type InsertBillingRecord = typeof billingHistory.$inferInsert;
+// ── Sport API Configurations ──────────────────────────────────────────────────
+export const sportApiConfigs = mysqlTable("sport_api_configs", {
+  id:               int("id").autoincrement().primaryKey(),
+  sportId:          int("sportId").notNull(),
+  providerName:     varchar("providerName", { length: 255 }).notNull(),
+  baseUrl:          varchar("baseUrl", { length: 500 }).notNull(),
+  apiKey:           varchar("apiKey", { length: 500 }),
+  endpointFixtures: varchar("endpointFixtures", { length: 500 }),
+  endpointResults:  varchar("endpointResults", { length: 500 }),
+  additionalHeaders: json("additionalHeaders").$type<Record<string, string>>(),
+  isActive:         boolean("isActive").default(true).notNull(),
+  notes:            text("notes"),
+  createdAt:        timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:        timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => [
+  index("sac_sportId_idx").on(t.sportId),
+]);
+export type SportApiConfig = typeof sportApiConfigs.$inferSelect;
+export type InsertSportApiConfig = typeof sportApiConfigs.$inferInsert;
