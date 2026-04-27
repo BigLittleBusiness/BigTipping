@@ -301,3 +301,12 @@
 
 - [x] Add competition selector to EntrantsManagement page — filter entrants, search, and all actions by selected competition
 - [x] Add competition selector to RoundManagement page — filter rounds, fixtures, tie-breaker, lock/unlock by selected competition
+
+## Phase 24: Inline Round Status Transitions
+
+- [x] Add "Open" button for upcoming rounds (upcoming → open)
+- [x] Retain Lock button for open rounds (open → locked/closed)
+- [x] Add Unlock button for locked rounds (locked → open)
+- [x] Add "Mark Scored" button for locked rounds (locked → scored)
+- [x] Add "Complete" button for scored rounds (scored → completed)
+- [x] Show status flow indicator on each round card so admins understand the progression

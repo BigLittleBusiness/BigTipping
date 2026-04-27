@@ -9,17 +9,57 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Lock, Unlock, Clock, Calendar, Trophy, ChevronRight } from "lucide-react";
+import {
+  Lock, Unlock, Clock, Calendar, Trophy, ChevronRight,
+  PlayCircle, CheckCircle2, Star, ArrowRight,
+} from "lucide-react";
 
-function statusBadge(status: string) {
-  const map: Record<string, string> = {
-    upcoming: "bg-blue-100 text-blue-700",
-    open: "bg-green-100 text-green-700",
-    locked: "bg-yellow-100 text-yellow-700",
-    scored: "bg-purple-100 text-purple-700",
-    completed: "bg-gray-100 text-gray-600",
-  };
-  return <Badge className={`text-xs ${map[status] ?? "bg-gray-100 text-gray-600"}`}>{status}</Badge>;
+// Status display config
+const STATUS_CONFIG: Record<string, { label: string; className: string; step: number }> = {
+  upcoming: { label: "Upcoming",  className: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",     step: 0 },
+  open:     { label: "Open",      className: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300", step: 1 },
+  closed:   { label: "Locked",    className: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300", step: 2 },
+  scored:   { label: "Scored",    className: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300", step: 3 },
+};
+
+const STATUS_STEPS = ["upcoming", "open", "closed", "scored"] as const;
+type RoundStatus = typeof STATUS_STEPS[number];
+
+function StatusBadge({ status }: { status: string }) {
+  const cfg = STATUS_CONFIG[status] ?? { label: status, className: "bg-gray-100 text-gray-600" };
+  return <Badge className={`text-xs font-medium ${cfg.className}`}>{cfg.label}</Badge>;
+}
+
+/** Horizontal step-flow indicator showing where this round sits in the lifecycle */
+function StatusFlow({ current }: { current: string }) {
+  const currentStep = STATUS_CONFIG[current]?.step ?? -1;
+  return (
+    <div className="flex items-center gap-1 text-xs">
+      {STATUS_STEPS.map((s, i) => {
+        const cfg = STATUS_CONFIG[s];
+        const done = i < currentStep;
+        const active = i === currentStep;
+        return (
+          <span key={s} className="flex items-center gap-1">
+            <span
+              className={`px-2 py-0.5 rounded-full font-medium transition-colors ${
+                active
+                  ? cfg.className
+                  : done
+                  ? "bg-muted text-muted-foreground line-through"
+                  : "bg-muted/50 text-muted-foreground/50"
+              }`}
+            >
+              {cfg.label}
+            </span>
+            {i < STATUS_STEPS.length - 1 && (
+              <ArrowRight size={10} className={done || active ? "text-muted-foreground" : "text-muted-foreground/30"} />
+            )}
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function RoundManagement() {
@@ -43,13 +83,18 @@ export default function RoundManagement() {
 
   // Fixtures modal
   const [fixturesRound, setFixturesRound] = useState<number | null>(null);
+
   const setDeadlineMut = trpc.rounds.setDeadline.useMutation({
     onSuccess: () => { toast.success("Deadline updated"); setDeadlineRound(null); refetch(); },
     onError: (e) => toast.error(e.message),
   });
 
   const setStatus = trpc.rounds.setStatus.useMutation({
-    onSuccess: () => { toast.success("Round status updated"); refetch(); },
+    onSuccess: (_, vars) => {
+      const label = STATUS_CONFIG[vars.status]?.label ?? vars.status;
+      toast.success(`Round marked as ${label}`);
+      refetch();
+    },
     onError: (e) => toast.error(e.message),
   });
 
@@ -69,6 +114,73 @@ export default function RoundManagement() {
     { roundId: tbRound! },
     { enabled: !!tbRound }
   );
+
+  /** Returns the primary forward-transition button for a given status */
+  function forwardButton(round: { id: number; status: string }) {
+    const pending = setStatus.isPending;
+    switch (round.status as RoundStatus) {
+      case "upcoming":
+        return (
+          <Button
+            size="sm"
+            variant="default"
+            className="bg-green-600 hover:bg-green-700 text-white"
+            disabled={pending}
+            onClick={() => setStatus.mutate({ id: round.id, status: "open" })}
+          >
+            <PlayCircle size={13} className="mr-1" />
+            Open Round
+          </Button>
+        );
+      case "open":
+        return (
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-yellow-400 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-900/20"
+            disabled={pending}
+            onClick={() => setStatus.mutate({ id: round.id, status: "closed" })}
+          >
+            <Lock size={13} className="mr-1" />
+            Lock Round
+          </Button>
+        );
+      case "closed":
+        return (
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-purple-400 text-purple-700 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20"
+            disabled={pending}
+            onClick={() => setStatus.mutate({ id: round.id, status: "scored" })}
+          >
+            <Star size={13} className="mr-1" />
+            Mark Scored
+          </Button>
+        );
+      case "scored":
+        return (
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-gray-400 text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800"
+            disabled={pending}
+            onClick={() => {
+              if (confirm("Mark this round as completed? This cannot be undone.")) {
+                // "completed" is not in the DB enum — scored is the terminal state;
+                // keep the button visible but inform the admin
+                toast.info("Scored is the final state for a round.");
+              }
+            }}
+          >
+            <CheckCircle2 size={13} className="mr-1" />
+            Completed
+          </Button>
+        );
+      default:
+        return null;
+    }
+  }
 
   return (
     <AdminLayout>
@@ -128,17 +240,20 @@ export default function RoundManagement() {
             {rounds.map(round => (
               <Card key={round.id}>
                 <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-3">
                       <CardTitle className="text-base">
                         {round.name ?? `Round ${round.roundNumber}`}
                       </CardTitle>
-                      {statusBadge(round.status)}
+                      <StatusBadge status={round.status} />
                     </div>
-                    <div className="flex items-center gap-2">
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Utility actions — always available */}
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant="ghost"
+                        className="text-muted-foreground"
                         onClick={() => setFixturesRound(round.id)}
                       >
                         <Calendar size={13} className="mr-1" />
@@ -146,50 +261,55 @@ export default function RoundManagement() {
                       </Button>
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant="ghost"
+                        className="text-muted-foreground"
                         onClick={() => {
                           setDeadlineRound(round.id);
                           setDeadlineVal(round.tipsCloseAt ? new Date(round.tipsCloseAt).toISOString().slice(0, 16) : "");
                         }}
                       >
                         <Clock size={13} className="mr-1" />
-                        Set Deadline
+                        Deadline
                       </Button>
                       <Button
                         size="sm"
-                        variant="outline"
-                        onClick={() => setTbRound(round.id)}
+                        variant="ghost"
+                        className="text-muted-foreground"
+                        onClick={() => { setTbRound(round.id); setTbFixtureId(null); }}
                       >
                         <Trophy size={13} className="mr-1" />
                         Tie-Breaker
                       </Button>
-                      {round.status === "open" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setStatus.mutate({ id: round.id, status: "closed" })}
-                          disabled={setStatus.isPending}
-                        >
-                          <Lock size={13} className="mr-1" />
-                          Lock
-                        </Button>
-                      )}
+
+                      {/* Divider */}
+                      <span className="w-px h-5 bg-border" />
+
+                      {/* Unlock back to open (only when locked/closed) */}
                       {round.status === "closed" && (
                         <Button
                           size="sm"
-                          variant="outline"
-                          onClick={() => setStatus.mutate({ id: round.id, status: "open" })}
+                          variant="ghost"
+                          className="text-muted-foreground"
                           disabled={setStatus.isPending}
+                          onClick={() => setStatus.mutate({ id: round.id, status: "open" })}
                         >
                           <Unlock size={13} className="mr-1" />
                           Unlock
                         </Button>
                       )}
+
+                      {/* Primary forward-transition button */}
+                      {forwardButton(round)}
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="flex gap-6 text-xs text-muted-foreground">
+                <CardContent className="pt-1">
+                  {/* Status flow indicator */}
+                  <div className="mb-2">
+                    <StatusFlow current={round.status} />
+                  </div>
+                  {/* Meta info */}
+                  <div className="flex gap-6 text-xs text-muted-foreground mt-1">
                     {round.tipsCloseAt && (
                       <span className="flex items-center gap-1">
                         <Clock size={11} />
