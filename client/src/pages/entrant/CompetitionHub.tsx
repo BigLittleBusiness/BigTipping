@@ -55,20 +55,38 @@ export default function CompetitionHub() {
   const [selectedRoundId, setSelectedRoundId] = useState<number | null>(null);
 
   /**
-   * Active round selection logic:
+   * Active round selection logic (in priority order):
    * 1. Explicit user selection
-   * 2. Current open round
-   * 3. First round with fixtures loaded (fixtureCount > 0)
-   * 4. First round in the list
+   * 2. Round immediately after the last scored round (e.g. Round 5 scored → show Round 6)
+   * 3. Current open round
+   * 4. First round with fixtures loaded (fixtureCount > 0)
+   * 5. First round in the list
    */
   const activeRoundId = useMemo(() => {
     if (selectedRoundId) return selectedRoundId;
-    if (currentRound?.id) return currentRound.id;
-    if (allRounds) {
-      const withFixtures = allRounds.find(r => (r as typeof r & { fixtureCount?: number }).fixtureCount ?? 0 > 0);
+    if (allRounds && allRounds.length > 0) {
+      // Find the highest roundNumber among scored rounds
+      const scoredRounds = allRounds
+        .filter(r => r.status === "scored")
+        .sort((a, b) => b.roundNumber - a.roundNumber);
+      if (scoredRounds.length > 0) {
+        const lastScoredNumber = scoredRounds[0].roundNumber;
+        const nextRound = allRounds
+          .filter(r => r.roundNumber > lastScoredNumber)
+          .sort((a, b) => a.roundNumber - b.roundNumber)[0];
+        if (nextRound) return nextRound.id;
+      }
+      // Fallback: open round
+      if (currentRound?.id) return currentRound.id;
+      // Fallback: first round with fixtures
+      const withFixtures = allRounds.find(
+        r => ((r as typeof r & { fixtureCount?: number }).fixtureCount ?? 0) > 0
+      );
       if (withFixtures) return withFixtures.id;
+      // Fallback: first round
       return allRounds[0]?.id ?? null;
     }
+    if (currentRound?.id) return currentRound.id;
     return null;
   }, [selectedRoundId, currentRound, allRounds]);
 

@@ -322,3 +322,8 @@
 - [x] Each fixture card must display: Home Team v Away Team — Venue — Start Time
 - [x] Venue and start time should be clearly visible below the team buttons
 - [x] Rounds with no fixtures should show an appropriate empty state
+
+## Phase 27: Tips Entry Default Round — Next After Last Scored
+
+- [x] Default to the round immediately after the last scored round (e.g. Round 5 scored → show Round 6)
+- [x] Fallback order: next-after-scored → open round → first round with fixtures → round 1
