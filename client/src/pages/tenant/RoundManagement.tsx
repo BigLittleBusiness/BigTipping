@@ -23,9 +23,10 @@ function statusBadge(status: string) {
 }
 
 export default function RoundManagement() {
-  const { data: competitions } = trpc.competitions.list.useQuery();
+  const { data: competitions, isLoading: compsLoading } = trpc.competitions.list.useQuery();
   const [compId, setCompId] = useState<number>(0);
   const selectedComp = compId || competitions?.[0]?.id || 0;
+  const selectedCompName = competitions?.find(c => c.id === selectedComp)?.name ?? "";
 
   const { data: rounds, refetch } = trpc.rounds.list.useQuery(
     { competitionId: selectedComp },
@@ -72,18 +73,47 @@ export default function RoundManagement() {
   return (
     <AdminLayout>
       <div className="space-y-6">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Round Management</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">Set deadlines, lock rounds, and configure tie-breakers</p>
+            <p className="text-muted-foreground text-sm mt-0.5">
+              {selectedCompName ? (
+                <span className="flex items-center gap-1.5">
+                  <Trophy size={12} className="text-primary" />
+                  {selectedCompName}
+                </span>
+              ) : "Set deadlines, lock rounds, and configure tie-breakers"}
+            </p>
           </div>
-          {competitions && competitions.length > 1 && (
-            <Select value={String(selectedComp)} onValueChange={v => setCompId(Number(v))}>
-              <SelectTrigger className="w-48"><SelectValue placeholder="Competition" /></SelectTrigger>
+        </div>
+
+        {/* Competition selector — always visible */}
+        <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-lg border border-border">
+          <span className="text-sm font-medium text-muted-foreground shrink-0">Competition</span>
+          {compsLoading ? (
+            <div className="h-9 w-48 rounded-md bg-muted animate-pulse" />
+          ) : !competitions || competitions.length === 0 ? (
+            <span className="text-sm text-muted-foreground italic">No competitions found</span>
+          ) : (
+            <Select
+              value={selectedComp > 0 ? String(selectedComp) : ""}
+              onValueChange={v => setCompId(Number(v))}
+            >
+              <SelectTrigger className="w-64 bg-background">
+                <SelectValue placeholder="Select a competition…" />
+              </SelectTrigger>
               <SelectContent>
-                {competitions.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                {competitions.map(c => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
+          )}
+          {rounds && rounds.length > 0 && (
+            <span className="text-xs text-muted-foreground ml-auto">
+              {rounds.length} round{rounds.length !== 1 ? "s" : ""}
+            </span>
           )}
         </div>
 

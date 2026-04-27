@@ -296,3 +296,8 @@
 - [x] `/tenant/prizes` — Prizes: prize rules (weekly/season win conditions), place definitions, manual award
 - [x] `/tenant/account` — Account & Subscription: org details, subscription info, payment method, billing history
 - [x] Add all new routes to App.tsx and nav items to AdminLayout
+
+## Phase 23: Competition Selector on Entrants & Rounds Pages
+
+- [x] Add competition selector to EntrantsManagement page — filter entrants, search, and all actions by selected competition
+- [x] Add competition selector to RoundManagement page — filter rounds, fixtures, tie-breaker, lock/unlock by selected competition

@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import AdminLayout from "@/components/AdminLayout";
 import { trpc } from "@/lib/trpc";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -9,18 +9,19 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { UserPlus, Upload, Trash2, Mail, Eye, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { UserPlus, Upload, Trash2, Mail, Eye, Search, ChevronLeft, ChevronRight, Trophy } from "lucide-react";
 
 const PAGE_SIZE = 25;
 
 export default function EntrantsManagement() {
-  const { data: competitions } = trpc.competitions.list.useQuery();
+  const { data: competitions, isLoading: compsLoading } = trpc.competitions.list.useQuery();
   const [compId, setCompId] = useState<number>(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
 
   const selectedComp = compId || competitions?.[0]?.id || 0;
+  const selectedCompName = competitions?.find(c => c.id === selectedComp)?.name ?? "";
 
   const { data, refetch, isLoading } = trpc.competitions.listEntrants.useQuery(
     { competitionId: selectedComp, page, pageSize: PAGE_SIZE, search: search || undefined },
@@ -114,30 +115,59 @@ export default function EntrantsManagement() {
   return (
     <AdminLayout>
       <div className="space-y-6">
+        {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Entrants</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">Manage competition participants</p>
+            <p className="text-muted-foreground text-sm mt-0.5">
+              {selectedCompName ? (
+                <span className="flex items-center gap-1.5">
+                  <Trophy size={12} className="text-primary" />
+                  {selectedCompName}
+                </span>
+              ) : "Manage competition participants"}
+            </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {competitions && competitions.length > 1 && (
-              <Select value={String(selectedComp)} onValueChange={v => { setCompId(Number(v)); setPage(1); }}>
-                <SelectTrigger className="w-48"><SelectValue placeholder="Competition" /></SelectTrigger>
-                <SelectContent>
-                  {competitions.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            )}
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleCSVUpload} />
-            <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={importCSV.isPending}>
+            <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={importCSV.isPending || selectedComp === 0}>
               <Upload size={14} className="mr-1.5" />
               {importCSV.isPending ? "Importing…" : "Import CSV"}
             </Button>
-            <Button size="sm" onClick={() => setAddOpen(true)}>
+            <Button size="sm" onClick={() => setAddOpen(true)} disabled={selectedComp === 0}>
               <UserPlus size={14} className="mr-1.5" />
               Add Entrant
             </Button>
           </div>
+        </div>
+
+        {/* Competition selector — always visible */}
+        <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-lg border border-border">
+          <span className="text-sm font-medium text-muted-foreground shrink-0">Competition</span>
+          {compsLoading ? (
+            <div className="h-9 w-48 rounded-md bg-muted animate-pulse" />
+          ) : !competitions || competitions.length === 0 ? (
+            <span className="text-sm text-muted-foreground italic">No competitions found</span>
+          ) : (
+            <Select
+              value={selectedComp > 0 ? String(selectedComp) : ""}
+              onValueChange={v => { setCompId(Number(v)); setPage(1); setSearch(""); setSearchInput(""); }}
+            >
+              <SelectTrigger className="w-64 bg-background">
+                <SelectValue placeholder="Select a competition…" />
+              </SelectTrigger>
+              <SelectContent>
+                {competitions.map(c => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {selectedComp > 0 && (
+            <span className="text-xs text-muted-foreground ml-auto">
+              {total > 0 ? `${total} entrant${total !== 1 ? "s" : ""}` : ""}
+            </span>
+          )}
         </div>
 
         {/* Search */}
