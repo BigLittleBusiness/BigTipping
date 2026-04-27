@@ -327,3 +327,8 @@
 
 - [x] Default to the round immediately after the last scored round (e.g. Round 5 scored → show Round 6)
 - [x] Fallback order: next-after-scored → open round → first round with fixtures → round 1
+
+## Phase 28: Previous Round Results Summary Card on Tips Entry
+
+- [x] Add `tips.myRoundSummary` procedure — correct count, total tips, points earned for a given round
+- [x] Show previous round results card above fixture list on Tips Entry screen

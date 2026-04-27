@@ -96,6 +96,21 @@ export default function CompetitionHub() {
   );
   const { data: history } = trpc.tips.myHistory.useQuery({ competitionId: compId });
 
+  // Previous round: the highest-numbered scored round before the active round
+  const previousScoredRound = useMemo(() => {
+    if (!allRounds || !activeRoundId) return null;
+    const activeRoundNumber = allRounds.find(r => r.id === activeRoundId)?.roundNumber ?? Infinity;
+    const scored = allRounds
+      .filter(r => r.status === "scored" && r.roundNumber < activeRoundNumber)
+      .sort((a, b) => b.roundNumber - a.roundNumber);
+    return scored[0] ?? null;
+  }, [allRounds, activeRoundId]);
+
+  const { data: prevRoundSummary } = trpc.tips.myRoundSummary.useQuery(
+    { roundId: previousScoredRound!.id, competitionId: compId },
+    { enabled: !!previousScoredRound }
+  );
+
   const submitTip = trpc.tips.submit.useMutation({
     onSuccess: () => { refetchTips(); toast.success("Tip saved!"); },
     onError: () => toast.error("Could not save tip."),
@@ -167,6 +182,36 @@ export default function CompetitionHub() {
 
           {/* ── TIPS TAB ─────────────────────────────────────────────── */}
           <TabsContent value="tips" className="mt-4 space-y-4">
+
+            {/* Previous round results summary card */}
+            {prevRoundSummary && (
+              <div className="flex items-center gap-4 px-4 py-3 rounded-lg border bg-muted/40 border-border">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    {prevRoundSummary.roundLabel} Results
+                  </p>
+                  <p className="text-sm font-semibold mt-0.5">
+                    {prevRoundSummary.correctTips}/{prevRoundSummary.totalTips} correct
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xl font-bold font-mono text-primary">+{prevRoundSummary.pointsEarned}</p>
+                  <p className="text-xs text-muted-foreground">pts earned</p>
+                </div>
+                {/* Accuracy bar */}
+                <div className="hidden sm:flex flex-col items-end gap-1 shrink-0 w-20">
+                  <div className="w-full h-1.5 rounded-full bg-border overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${Math.round((prevRoundSummary.correctTips / prevRoundSummary.totalTips) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {Math.round((prevRoundSummary.correctTips / prevRoundSummary.totalTips) * 100)}% accuracy
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Round selector — all rounds, with fixture count and status indicator */}
             {allRounds && allRounds.length > 0 && (

@@ -82,6 +82,42 @@ export const tipsRouter = router({
       }));
     }),
 
+  // Get my summary stats for a specific round (correct count, total, points earned)
+  myRoundSummary: entrantProcedure
+    .input(z.object({ roundId: z.number(), competitionId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      // Get all fixture IDs for this round
+      const roundFixtures = await db.select({ id: fixtures.id })
+        .from(fixtures)
+        .where(eq(fixtures.roundId, input.roundId));
+      if (!roundFixtures.length) return null;
+      const fixtureIds = roundFixtures.map(f => f.id);
+      // Get my tips for those fixtures in this competition
+      const myTips = await db.select().from(tips).where(
+        and(eq(tips.userId, ctx.user.id), eq(tips.competitionId, input.competitionId))
+      );
+      const relevantTips = myTips.filter(t => fixtureIds.includes(t.fixtureId));
+      if (!relevantTips.length) return null;
+      // Only show summary if at least one tip has been scored
+      const scored = relevantTips.some(t => t.isCorrect !== null);
+      if (!scored) return null;
+      const totalTips    = relevantTips.length;
+      const correctTips  = relevantTips.filter(t => t.isCorrect === true).length;
+      const pointsEarned = relevantTips.reduce((sum, t) => sum + (t.pointsEarned ?? 0), 0);
+      // Get round label
+      const [round] = await db.select({ roundNumber: rounds.roundNumber, name: rounds.name })
+        .from(rounds).where(eq(rounds.id, input.roundId)).limit(1);
+      return {
+        roundId:     input.roundId,
+        roundLabel:  round?.name ?? `Round ${round?.roundNumber ?? "?"}`,
+        totalTips,
+        correctTips,
+        pointsEarned,
+      };
+    }),
+
   // Get my full tip history for a competition
   myHistory: entrantProcedure
     .input(z.object({ competitionId: z.number() }))
