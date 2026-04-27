@@ -82,8 +82,13 @@ export const leaderboardRouter = router({
         let roundCorrect = 0;
 
         for (const tip of userTips) {
-          const correctWinner = winnerMap[tip.fixtureId];
-          const isCorrect = correctWinner !== null && correctWinner !== undefined && tip.pickedTeamId === correctWinner;
+          const correctWinner = winnerMap[tip.fixtureId]; // null = draw result
+          // A tip is correct if:
+          //   - The entrant picked a team AND that team won, OR
+          //   - The entrant picked Draw (isDraw=true) AND the fixture ended in a draw (winnerId=null)
+          const isCorrect = tip.isDraw
+            ? (correctWinner === null || correctWinner === undefined)
+            : (correctWinner !== null && correctWinner !== undefined && tip.pickedTeamId === correctWinner);
           const pts = isCorrect ? rules.pointsPerCorrectTip : 0;
           await db.update(tips).set({ isCorrect, pointsEarned: pts }).where(eq(tips.id, tip.id));
           if (isCorrect) { roundCorrect++; roundPoints += pts; }

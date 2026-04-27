@@ -332,3 +332,13 @@
 
 - [x] Add `tips.myRoundSummary` procedure — correct count, total tips, points earned for a given round
 - [x] Show previous round results card above fixture list on Tips Entry screen
+
+## Phase 29: Tips Entry — Draw Option, Enriched History, Round Breakdown
+
+- [x] Add `allowDraw` boolean to competitions table; make `pickedTeamId` nullable and add `isDraw` boolean to tips table
+- [x] Apply migration for schema changes
+- [x] Update `tips.submit` to accept `isDraw` flag; update `leaderboard.scoreRound` to score draw tips correctly
+- [x] Add Draw button to fixture cards (shown only when comp.allowDraw = true)
+- [x] Enhance History tab: show opponent name, round label, venue alongside picked team and result
+- [x] Add `tips.myRoundBreakdown` procedure — points per round for the current entrant
+- [x] Add collapsible round-by-round breakdown to the My Position stats card on Tips tab

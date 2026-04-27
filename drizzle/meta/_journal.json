@@ -71,6 +71,13 @@
       "when": 1777266657417,
       "tag": "0009_organic_ozymandias",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1777282624655,
+      "tag": "0010_gifted_doomsday",
+      "breakpoints": true
     }
   ]
 }

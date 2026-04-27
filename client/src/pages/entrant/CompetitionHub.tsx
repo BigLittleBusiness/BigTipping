@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import {
   Trophy, CheckCircle2, XCircle, Circle, ChevronLeft,
   Flame, Clock, AlertCircle, Lock, MapPin, Calendar,
+  ChevronDown, ChevronUp, Minus,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -19,7 +20,6 @@ const RANK_BADGE: Record<number, { label: string; cls: string }> = {
   3: { label: "Bronze", cls: "bg-orange-100 text-orange-700 border border-orange-300" },
 };
 
-/** Round status pill colours */
 const ROUND_STATUS_CLS: Record<string, string> = {
   open:     "text-green-600",
   upcoming: "text-blue-500",
@@ -27,16 +27,12 @@ const ROUND_STATUS_CLS: Record<string, string> = {
   scored:   "text-purple-600",
 };
 
-/** Format a UTC timestamp as a readable local date/time */
 function formatMatchTime(ts: Date | string | null | undefined): string {
   if (!ts) return "Time TBC";
   const d = new Date(ts);
   return d.toLocaleString("en-AU", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
+    weekday: "short", day: "numeric", month: "short",
+    hour: "2-digit", minute: "2-digit",
   });
 }
 
@@ -45,27 +41,21 @@ export default function CompetitionHub() {
   const compId = Number(params.id);
   const { user } = useAuth();
 
-  const { data: comp } = trpc.competitions.get.useQuery({ id: compId });
+  const { data: comp }         = trpc.competitions.get.useQuery({ id: compId });
   const { data: currentRound } = trpc.rounds.getCurrent.useQuery({ competitionId: compId });
-  const { data: allRounds } = trpc.rounds.list.useQuery({ competitionId: compId });
-  const { data: leaderboard } = trpc.leaderboard.get.useQuery({ competitionId: compId });
-  const { data: myPosition } = trpc.leaderboard.myPosition.useQuery({ competitionId: compId });
-  const { data: prizes } = trpc.prizes.list.useQuery({ competitionId: compId });
+  const { data: allRounds }    = trpc.rounds.list.useQuery({ competitionId: compId });
+  const { data: leaderboard }  = trpc.leaderboard.get.useQuery({ competitionId: compId });
+  const { data: prizes }       = trpc.prizes.list.useQuery({ competitionId: compId });
+  const { data: history }      = trpc.tips.myHistory.useQuery({ competitionId: compId });
+  const { data: roundBreakdown } = trpc.tips.myRoundBreakdown.useQuery({ competitionId: compId });
 
   const [selectedRoundId, setSelectedRoundId] = useState<number | null>(null);
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
-  /**
-   * Active round selection logic (in priority order):
-   * 1. Explicit user selection
-   * 2. Round immediately after the last scored round (e.g. Round 5 scored → show Round 6)
-   * 3. Current open round
-   * 4. First round with fixtures loaded (fixtureCount > 0)
-   * 5. First round in the list
-   */
+  // Active round: next after last scored → open → first with fixtures → first
   const activeRoundId = useMemo(() => {
     if (selectedRoundId) return selectedRoundId;
     if (allRounds && allRounds.length > 0) {
-      // Find the highest roundNumber among scored rounds
       const scoredRounds = allRounds
         .filter(r => r.status === "scored")
         .sort((a, b) => b.roundNumber - a.roundNumber);
@@ -76,14 +66,11 @@ export default function CompetitionHub() {
           .sort((a, b) => a.roundNumber - b.roundNumber)[0];
         if (nextRound) return nextRound.id;
       }
-      // Fallback: open round
       if (currentRound?.id) return currentRound.id;
-      // Fallback: first round with fixtures
       const withFixtures = allRounds.find(
         r => ((r as typeof r & { fixtureCount?: number }).fixtureCount ?? 0) > 0
       );
       if (withFixtures) return withFixtures.id;
-      // Fallback: first round
       return allRounds[0]?.id ?? null;
     }
     if (currentRound?.id) return currentRound.id;
@@ -94,9 +81,8 @@ export default function CompetitionHub() {
     { roundId: activeRoundId!, competitionId: compId },
     { enabled: !!activeRoundId }
   );
-  const { data: history } = trpc.tips.myHistory.useQuery({ competitionId: compId });
 
-  // Previous round: the highest-numbered scored round before the active round
+  // Previous scored round (for summary card)
   const previousScoredRound = useMemo(() => {
     if (!allRounds || !activeRoundId) return null;
     const activeRoundNumber = allRounds.find(r => r.id === activeRoundId)?.roundNumber ?? Infinity;
@@ -116,8 +102,27 @@ export default function CompetitionHub() {
     onError: () => toast.error("Could not save tip."),
   });
 
-  const myEntry = leaderboard?.find(e => e.userId === user?.id);
+  const myEntry     = leaderboard?.find(e => e.userId === user?.id);
   const activeRound = allRounds?.find(r => r.id === activeRoundId);
+  const allowDraw   = (comp as (typeof comp & { allowDraw?: boolean }) | null)?.allowDraw ?? false;
+
+  // History: group by round for display
+  const historyByRound = useMemo(() => {
+    if (!history?.length) return [];
+    const groups: Record<number, { roundLabel: string; roundNumber: number; tips: typeof history }> = {};
+    for (const t of history) {
+      const roundId = t.round?.id ?? 0;
+      if (!groups[roundId]) {
+        groups[roundId] = {
+          roundLabel:  t.round?.name ?? `Round ${t.round?.roundNumber ?? "?"}`,
+          roundNumber: t.round?.roundNumber ?? 0,
+          tips: [],
+        };
+      }
+      groups[roundId].tips.push(t);
+    }
+    return Object.values(groups).sort((a, b) => b.roundNumber - a.roundNumber);
+  }, [history]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -135,9 +140,10 @@ export default function CompetitionHub() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+
         {/* My stats card */}
         {myEntry && (
-          <Card className="bg-primary text-primary-foreground">
+          <Card className="bg-primary text-primary-foreground overflow-hidden">
             <CardContent className="py-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -168,6 +174,32 @@ export default function CompetitionHub() {
                   </div>
                 )}
               </div>
+
+              {/* Round-by-round breakdown toggle */}
+              {roundBreakdown && roundBreakdown.length > 0 && (
+                <div className="mt-3 border-t border-white/20 pt-3">
+                  <button
+                    className="flex items-center gap-1.5 text-xs font-medium opacity-80 hover:opacity-100 transition-opacity"
+                    onClick={() => setShowBreakdown(v => !v)}
+                  >
+                    {showBreakdown ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                    Round-by-round breakdown
+                  </button>
+                  {showBreakdown && (
+                    <div className="mt-2 space-y-1 max-h-48 overflow-y-auto pr-1">
+                      {roundBreakdown.map(r => (
+                        <div key={r.roundId} className="flex items-center justify-between text-xs">
+                          <span className="opacity-70 truncate">{r.roundLabel}</span>
+                          <div className="flex items-center gap-3 shrink-0 ml-2">
+                            <span className="opacity-60">{r.correct}/{r.total}</span>
+                            <span className="font-mono font-bold">+{r.points}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -198,7 +230,6 @@ export default function CompetitionHub() {
                   <p className="text-xl font-bold font-mono text-primary">+{prevRoundSummary.pointsEarned}</p>
                   <p className="text-xs text-muted-foreground">pts earned</p>
                 </div>
-                {/* Accuracy bar */}
                 <div className="hidden sm:flex flex-col items-end gap-1 shrink-0 w-20">
                   <div className="w-full h-1.5 rounded-full bg-border overflow-hidden">
                     <div
@@ -213,31 +244,29 @@ export default function CompetitionHub() {
               </div>
             )}
 
-            {/* Round selector — all rounds, with fixture count and status indicator */}
+            {/* Round selector */}
             {allRounds && allRounds.length > 0 && (
               <div className="flex gap-2 flex-wrap">
                 {allRounds.map(r => {
                   const fc = (r as typeof r & { fixtureCount?: number }).fixtureCount ?? 0;
+                  const isActive = r.id === activeRoundId;
                   const statusCls = ROUND_STATUS_CLS[r.status] ?? "text-muted-foreground";
-                  const isActive = activeRoundId === r.id;
                   return (
                     <button
                       key={r.id}
                       onClick={() => setSelectedRoundId(r.id)}
-                      className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+                      className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
                         isActive
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background border-border hover:border-primary/50 text-foreground"
                       }`}
                     >
-                      {r.name ?? `Round ${r.roundNumber}`}
-                      {/* Status dot */}
                       {r.status === "open" && (
-                        <span className={`${isActive ? "text-green-300" : statusCls}`}>●</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
                       )}
-                      {/* Fixture count badge */}
+                      <span>{r.name ?? `R${r.roundNumber}`}</span>
                       {fc > 0 && (
-                        <span className={`text-[10px] px-1.5 py-0 rounded-full font-bold ${
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-mono ${
                           isActive ? "bg-white/20 text-white" : "bg-background text-muted-foreground"
                         }`}>
                           {fc}
@@ -249,7 +278,7 @@ export default function CompetitionHub() {
               </div>
             )}
 
-            {/* Deadline / status banner for the active round */}
+            {/* Deadline / status banner */}
             {activeRound && (() => {
               const deadline = activeRound.tipsCloseAt ? new Date(activeRound.tipsCloseAt) : null;
               const now = new Date();
@@ -327,6 +356,7 @@ export default function CompetitionHub() {
                   const deadlinePassed = deadline ? new Date() > deadline : false;
                   const isLocked = !isOpen || deadlinePassed;
                   const isScored = fixture.status === "completed";
+                  const isDrawResult = isScored && fixture.winnerId === null;
 
                   return (
                     <Card
@@ -338,7 +368,7 @@ export default function CompetitionHub() {
                       ].filter(Boolean).join(" ")}
                     >
                       <CardContent className="py-4 space-y-3">
-                        {/* Match info header: Home v Away */}
+                        {/* Match header */}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 min-w-0">
                             {tip?.isCorrect === true  && <CheckCircle2 size={15} className="text-green-600 shrink-0" />}
@@ -355,37 +385,33 @@ export default function CompetitionHub() {
                               <Lock size={11} /> Locked
                             </span>
                           )}
-                          {isScored && fixture.winner && (
-                            <span className="text-xs text-green-600 font-semibold shrink-0">
-                              {fixture.winner.name} won
+                          {isScored && (
+                            <span className="text-xs font-semibold shrink-0">
+                              {isDrawResult
+                                ? <span className="text-yellow-600">Draw</span>
+                                : <span className="text-green-600">{fixture.winner?.name} won</span>
+                              }
                             </span>
                           )}
                         </div>
 
                         {/* Venue & start time */}
                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                          {fixture.venue ? (
-                            <span className="flex items-center gap-1">
-                              <MapPin size={11} className="shrink-0" />
-                              {fixture.venue}
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 italic">
-                              <MapPin size={11} className="shrink-0" />
-                              Venue TBC
-                            </span>
-                          )}
+                          <span className="flex items-center gap-1">
+                            <MapPin size={11} className="shrink-0" />
+                            {fixture.venue ?? <span className="italic">Venue TBC</span>}
+                          </span>
                           <span className="flex items-center gap-1">
                             <Calendar size={11} className="shrink-0" />
                             {formatMatchTime(fixture.startTime)}
                           </span>
                         </div>
 
-                        {/* Team pick buttons */}
-                        <div className="flex items-center gap-3">
+                        {/* Team pick buttons + optional Draw button */}
+                        <div className="flex items-center gap-2">
                           <TeamButton
                             team={fixture.homeTeam}
-                            selected={tip?.pickedTeamId === fixture.homeTeamId}
+                            selected={!tip?.isDraw && tip?.pickedTeamId === fixture.homeTeamId}
                             correct={isScored ? fixture.winnerId === fixture.homeTeamId : undefined}
                             disabled={isLocked}
                             onClick={() => {
@@ -393,13 +419,26 @@ export default function CompetitionHub() {
                                 toast.error(deadlinePassed ? "The tipping deadline has passed." : "Tipping is closed for this round.");
                                 return;
                               }
-                              submitTip.mutate({ fixtureId: fixture.id, competitionId: compId, pickedTeamId: fixture.homeTeamId });
+                              submitTip.mutate({ fixtureId: fixture.id, competitionId: compId, pickedTeamId: fixture.homeTeamId, isDraw: false });
                             }}
                           />
-                          <span className="text-xs font-bold text-muted-foreground shrink-0">VS</span>
+                          {allowDraw && (
+                            <DrawButton
+                              selected={tip?.isDraw === true}
+                              correct={isScored ? isDrawResult : undefined}
+                              disabled={isLocked}
+                              onClick={() => {
+                                if (isLocked) {
+                                  toast.error(deadlinePassed ? "The tipping deadline has passed." : "Tipping is closed for this round.");
+                                  return;
+                                }
+                                submitTip.mutate({ fixtureId: fixture.id, competitionId: compId, isDraw: true });
+                              }}
+                            />
+                          )}
                           <TeamButton
                             team={fixture.awayTeam}
-                            selected={tip?.pickedTeamId === fixture.awayTeamId}
+                            selected={!tip?.isDraw && tip?.pickedTeamId === fixture.awayTeamId}
                             correct={isScored ? fixture.winnerId === fixture.awayTeamId : undefined}
                             disabled={isLocked}
                             onClick={() => {
@@ -407,12 +446,12 @@ export default function CompetitionHub() {
                                 toast.error(deadlinePassed ? "The tipping deadline has passed." : "Tipping is closed for this round.");
                                 return;
                               }
-                              submitTip.mutate({ fixtureId: fixture.id, competitionId: compId, pickedTeamId: fixture.awayTeamId });
+                              submitTip.mutate({ fixtureId: fixture.id, competitionId: compId, pickedTeamId: fixture.awayTeamId, isDraw: false });
                             }}
                           />
                         </div>
 
-                        {/* Score if completed */}
+                        {/* Final score */}
                         {isScored && fixture.homeScore !== null && fixture.awayScore !== null && (
                           <div className="text-center text-xs text-muted-foreground font-mono">
                             Final: {fixture.homeTeam?.abbreviation ?? fixture.homeTeam?.name ?? "Home"}{" "}
@@ -432,28 +471,75 @@ export default function CompetitionHub() {
           </TabsContent>
 
           {/* ── HISTORY TAB ────────────────────────────────────────── */}
-          <TabsContent value="history" className="mt-4">
-            <Card>
-              <CardContent className="p-0">
-                {!history?.length ? (
-                  <div className="text-center py-12 text-muted-foreground">No tips submitted yet.</div>
-                ) : (
-                  <div className="divide-y divide-border">
-                    {history.map(t => (
-                      <div key={t.id} className="flex items-center justify-between px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          {t.isCorrect === true  && <CheckCircle2 size={16} className="text-green-600 shrink-0" />}
-                          {t.isCorrect === false && <XCircle size={16} className="text-red-500 shrink-0" />}
-                          {t.isCorrect === null  && <Circle size={16} className="text-muted-foreground shrink-0" />}
-                          <span className="text-sm font-medium">{t.pickedTeam?.name ?? "Unknown"}</span>
-                        </div>
-                        <span className="font-mono text-sm font-bold text-primary">+{t.pointsEarned}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+          <TabsContent value="history" className="mt-4 space-y-3">
+            {!historyByRound.length ? (
+              <Card>
+                <CardContent className="text-center py-12 text-muted-foreground">No tips submitted yet.</CardContent>
+              </Card>
+            ) : (
+              historyByRound.map(group => (
+                <Card key={group.roundNumber}>
+                  <CardContent className="p-0">
+                    <div className="px-4 py-2.5 border-b border-border bg-muted/30">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        {group.roundLabel}
+                      </p>
+                    </div>
+                    <div className="divide-y divide-border">
+                      {group.tips.map(t => {
+                        const homeTeam = t.fixture?.homeTeam;
+                        const awayTeam = t.fixture?.awayTeam;
+                        const matchLabel = homeTeam && awayTeam
+                          ? `${homeTeam.name} v ${awayTeam.name}`
+                          : "Unknown match";
+                        const pickedLabel = t.isDraw
+                          ? "Draw"
+                          : t.pickedTeam?.name ?? "Unknown";
+                        const isDrawResult = t.fixture?.winnerId === null && t.fixture?.homeScore !== null;
+
+                        return (
+                          <div key={t.id} className="px-4 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-2.5 min-w-0">
+                                <div className="mt-0.5 shrink-0">
+                                  {t.isCorrect === true  && <CheckCircle2 size={15} className="text-green-600" />}
+                                  {t.isCorrect === false && <XCircle size={15} className="text-red-500" />}
+                                  {t.isCorrect === null  && <Circle size={15} className="text-muted-foreground" />}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{matchLabel}</p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    Tipped: <span className="font-semibold text-foreground">{pickedLabel}</span>
+                                    {t.fixture?.venue && (
+                                      <span className="ml-2 opacity-60">· {t.fixture.venue}</span>
+                                    )}
+                                  </p>
+                                  {/* Result row for scored fixtures */}
+                                  {t.fixture && t.fixture.homeScore !== null && t.fixture.awayScore !== null && (
+                                    <p className="text-xs text-muted-foreground mt-0.5 font-mono">
+                                      {homeTeam?.abbreviation ?? homeTeam?.name}{" "}
+                                      <span className="font-bold text-foreground">
+                                        {t.fixture.homeScore} – {t.fixture.awayScore}
+                                      </span>{" "}
+                                      {awayTeam?.abbreviation ?? awayTeam?.name}
+                                      {isDrawResult && <span className="ml-1 text-yellow-600 font-semibold">(Draw)</span>}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="font-mono text-sm font-bold text-primary">+{t.pointsEarned}</span>
+                                <p className="text-xs text-muted-foreground">pts</p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </TabsContent>
 
           {/* ── LEADERBOARD TAB ────────────────────────────────────── */}
@@ -565,6 +651,31 @@ function TeamButton({
     <button className={`${base} ${state}`} onClick={onClick} disabled={disabled}>
       <span className="text-lg font-bold">{team?.abbreviation ?? team?.name?.charAt(0) ?? "?"}</span>
       <span className="text-xs mt-0.5 text-center leading-tight">{team?.name ?? "TBD"}</span>
+    </button>
+  );
+}
+
+function DrawButton({
+  selected, correct, disabled, onClick,
+}: {
+  selected: boolean;
+  correct?: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const base = "flex flex-col items-center justify-center px-3 py-3 rounded-xl border-2 transition-all font-medium text-sm min-w-[56px]";
+  const state = selected
+    ? correct === true  ? "border-green-500 bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300"
+      : correct === false ? "border-red-400 bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400"
+      : "border-yellow-500 bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300"
+    : disabled
+    ? "border-border bg-muted/30 text-muted-foreground cursor-default"
+    : "border-border hover:border-yellow-400 hover:bg-yellow-50/50 cursor-pointer text-muted-foreground";
+
+  return (
+    <button className={`${base} ${state}`} onClick={onClick} disabled={disabled}>
+      <Minus size={16} />
+      <span className="text-xs mt-0.5">Draw</span>
     </button>
   );
 }

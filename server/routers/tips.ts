@@ -6,16 +6,22 @@ import { getDb } from "../db";
 import { tips, fixtures, teams, rounds } from "../../drizzle/schema";
 
 export const tipsRouter = router({
-  // Submit or update a tip
+  // Submit or update a tip (pickedTeamId is null for draw tips)
   submit: entrantProcedure
     .input(z.object({
       fixtureId: z.number(),
       competitionId: z.number(),
-      pickedTeamId: z.number(),
+      pickedTeamId: z.number().nullable().optional(),
+      isDraw: z.boolean().optional().default(false),
     }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
+
+      // Validate: must pick a team OR select draw
+      if (!input.isDraw && input.pickedTeamId == null) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Must pick a team or select Draw." });
+      }
 
       // ── Server-side lock-out: verify round is open and deadline hasn't passed ──
       const [fixture] = await db.select().from(fixtures).where(eq(fixtures.id, input.fixtureId)).limit(1);
@@ -40,15 +46,19 @@ export const tipsRouter = router({
         });
       }
 
+      const pickedTeamId = input.isDraw ? null : (input.pickedTeamId ?? null);
+      const isDraw = input.isDraw ?? false;
+
       await db.insert(tips).values({
         userId: ctx.user.id,
         fixtureId: input.fixtureId,
         competitionId: input.competitionId,
-        pickedTeamId: input.pickedTeamId,
+        pickedTeamId,
+        isDraw,
         isCorrect: null,
         pointsEarned: 0,
       }).onDuplicateKeyUpdate({
-        set: { pickedTeamId: input.pickedTeamId, isCorrect: null, pointsEarned: 0 },
+        set: { pickedTeamId, isDraw, isCorrect: null, pointsEarned: 0 },
       });
       return { success: true };
     }),
@@ -78,7 +88,7 @@ export const tipsRouter = router({
           winner: f.winnerId ? teamMap[f.winnerId] ?? null : null,
         },
         tip: tipMap[f.id] ?? null,
-        pickedTeam: tipMap[f.id] ? teamMap[tipMap[f.id].pickedTeamId] ?? null : null,
+        pickedTeam: tipMap[f.id]?.pickedTeamId != null ? teamMap[tipMap[f.id]!.pickedTeamId!] ?? null : null,
       }));
     }),
 
@@ -118,7 +128,53 @@ export const tipsRouter = router({
       };
     }),
 
-  // Get my full tip history for a competition
+  // Get my round-by-round points breakdown for a competition
+  myRoundBreakdown: entrantProcedure
+    .input(z.object({ competitionId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const myTips = await db.select().from(tips).where(
+        and(eq(tips.userId, ctx.user.id), eq(tips.competitionId, input.competitionId))
+      );
+      if (!myTips.length) return [];
+      // Get all fixtures to map fixtureId -> roundId
+      const allFixtures = await db.select({ id: fixtures.id, roundId: fixtures.roundId }).from(fixtures);
+      const fixtureToRound = Object.fromEntries(allFixtures.map(f => [f.id, f.roundId]));
+      // Get all rounds for this competition
+      const allRounds = await db.select().from(rounds).where(eq(rounds.competitionId, input.competitionId));
+      const roundMap = Object.fromEntries(allRounds.map(r => [r.id, r]));
+      // Aggregate tips by round
+      const byRound: Record<number, { points: number; correct: number; total: number }> = {};
+      for (const tip of myTips) {
+        const roundId = fixtureToRound[tip.fixtureId];
+        if (!roundId) continue;
+        if (!byRound[roundId]) byRound[roundId] = { points: 0, correct: 0, total: 0 };
+        byRound[roundId].points  += tip.pointsEarned ?? 0;
+        byRound[roundId].correct += tip.isCorrect === true ? 1 : 0;
+        byRound[roundId].total   += 1;
+      }
+      // Return only scored rounds (those with at least one scored tip)
+      return Object.entries(byRound)
+        .filter(([roundId]) => {
+          const r = roundMap[Number(roundId)];
+          return r?.status === "scored";
+        })
+        .map(([roundId, stats]) => {
+          const r = roundMap[Number(roundId)];
+          return {
+            roundId:     Number(roundId),
+            roundLabel:  r?.name ?? `Round ${r?.roundNumber ?? "?"}`,
+            roundNumber: r?.roundNumber ?? 0,
+            points:      stats.points,
+            correct:     stats.correct,
+            total:       stats.total,
+          };
+        })
+        .sort((a, b) => a.roundNumber - b.roundNumber);
+    }),
+
+  // Get my full tip history for a competition (enriched with fixture + round context)
   myHistory: entrantProcedure
     .input(z.object({ competitionId: z.number() }))
     .query(async ({ ctx, input }) => {
@@ -127,11 +183,36 @@ export const tipsRouter = router({
       const myTips = await db.select().from(tips).where(
         and(eq(tips.userId, ctx.user.id), eq(tips.competitionId, input.competitionId))
       );
-      const allTeams = await db.select().from(teams);
-      const teamMap = Object.fromEntries(allTeams.map(t => [t.id, t]));
-      return myTips.map(t => ({
-        ...t,
-        pickedTeam: teamMap[t.pickedTeamId] ?? null,
-      }));
+      if (!myTips.length) return [];
+      // Fetch all fixtures and rounds referenced by these tips
+      const allFixtures = await db.select().from(fixtures);
+      const allRounds   = await db.select().from(rounds);
+      const allTeams    = await db.select().from(teams);
+      const fixtureMap  = Object.fromEntries(allFixtures.map(f => [f.id, f]));
+      const roundMap    = Object.fromEntries(allRounds.map(r => [r.id, r]));
+      const teamMap     = Object.fromEntries(allTeams.map(t => [t.id, t]));
+      return myTips.map(t => {
+        const fixture = fixtureMap[t.fixtureId] ?? null;
+        const round   = fixture ? roundMap[fixture.roundId] ?? null : null;
+        return {
+          ...t,
+          pickedTeam:  t.pickedTeamId != null ? teamMap[t.pickedTeamId] ?? null : null,
+          fixture: fixture ? {
+            id:          fixture.id,
+            venue:       fixture.venue,
+            startTime:   fixture.startTime,
+            homeScore:   fixture.homeScore,
+            awayScore:   fixture.awayScore,
+            winnerId:    fixture.winnerId,
+            homeTeam:    teamMap[fixture.homeTeamId] ?? null,
+            awayTeam:    teamMap[fixture.awayTeamId] ?? null,
+          } : null,
+          round: round ? {
+            id:          round.id,
+            roundNumber: round.roundNumber,
+            name:        round.name,
+          } : null,
+        };
+      });
     }),
 });

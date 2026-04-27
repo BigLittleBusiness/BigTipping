@@ -88,6 +88,7 @@ export const competitions = mysqlTable("competitions", {
   startDate:   timestamp("startDate"),
   endDate:     timestamp("endDate"),
   isPublic:     boolean("isPublic").default(true).notNull(),
+  allowDraw:    boolean("allowDraw").default(false).notNull(),
   inviteToken:  varchar("inviteToken", { length: 64 }).unique(),
   inviteEnabled: boolean("inviteEnabled").default(true).notNull(),
   createdAt:    timestamp("createdAt").defaultNow().notNull(),
@@ -149,7 +150,8 @@ export const tips = mysqlTable("tips", {
   userId:        int("userId").notNull(),
   fixtureId:     int("fixtureId").notNull(),
   competitionId: int("competitionId").notNull(),
-  pickedTeamId:  int("pickedTeamId").notNull(),
+  pickedTeamId:  int("pickedTeamId"),    // null = draw tip
+  isDraw:        boolean("isDraw").default(false).notNull(),
   isCorrect:     boolean("isCorrect"),   // null = not yet scored
   pointsEarned:  int("pointsEarned").default(0).notNull(),
   createdAt:     timestamp("createdAt").defaultNow().notNull(),
