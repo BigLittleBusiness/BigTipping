@@ -521,6 +521,26 @@ export const competitionsRouter = router({
       return { success: true };
     }),
 
+  // Update general competition settings (allowDraw, etc.)
+  updateSettings: tenantAdminProcedure
+    .input(z.object({
+      competitionId: z.number(),
+      allowDraw: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const tenantId = ctx.user.tenantId;
+      if (!tenantId) throw new Error("No tenant assigned");
+      const patch: Record<string, unknown> = {};
+      if (input.allowDraw !== undefined) patch.allowDraw = input.allowDraw;
+      if (Object.keys(patch).length === 0) return { success: true };
+      await db.update(competitions)
+        .set(patch)
+        .where(and(eq(competitions.id, input.competitionId), eq(competitions.tenantId, tenantId)));
+      return { success: true };
+    }),
+
   // Update scoring rules for a competition
   updateScoringRules: tenantAdminProcedure
     .input(z.object({

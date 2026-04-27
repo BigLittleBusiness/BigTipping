@@ -342,3 +342,8 @@
 - [x] Enhance History tab: show opponent name, round label, venue alongside picked team and result
 - [x] Add `tips.myRoundBreakdown` procedure — points per round for the current entrant
 - [x] Add collapsible round-by-round breakdown to the My Position stats card on Tips tab
+## Phase 30: Draw Checkbox, Fixture Tips Breakdown, Season Accuracy Chart
+
+- [x] Add allowDraw checkbox to Competition Setup page (default off, saves via competitions.updateSettings mutation)
+- [x] Enhance round-by-round breakdown: show tipped team per fixture inline with tooltip for full match detail
+- [x] Add season accuracy bar chart to My Position stats card (colour-coded by accuracy %, collapsible)

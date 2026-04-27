@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Palette, Save } from "lucide-react";
+import { Palette, Save, ToggleLeft } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 export default function CompetitionSetup() {
   const { data: competitions } = trpc.competitions.list.useQuery();
@@ -26,6 +27,7 @@ export default function CompetitionSetup() {
   const [bgImageUrl, setBgImageUrl] = useState("");
   const [bgImageMode, setBgImageMode] = useState<"centred" | "full_width" | "tile">("full_width");
   const [landingPageText, setLandingPageText] = useState("");
+  const [allowDraw, setAllowDraw] = useState(false);
 
   useEffect(() => {
     if (branding) {
@@ -38,8 +40,19 @@ export default function CompetitionSetup() {
     }
   }, [branding]);
 
+  // Load allowDraw from the selected competition row
+  const selectedCompData = competitions?.find(c => c.id === selectedComp);
+  useEffect(() => {
+    setAllowDraw(selectedCompData?.allowDraw ?? false);
+  }, [selectedCompData]);
+
   const updateBranding = trpc.competitions.updateBranding.useMutation({
     onSuccess: () => { toast.success("Branding saved"); refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const updateSettings = trpc.competitions.updateSettings.useMutation({
+    onSuccess: () => toast.success("Settings saved"),
     onError: (e) => toast.error(e.message),
   });
 
@@ -174,6 +187,38 @@ export default function CompetitionSetup() {
               onChange={e => setLandingPageText(e.target.value)}
               className="font-mono text-sm"
             />
+          </CardContent>
+        </Card>
+
+        {/* Draw Option */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ToggleLeft size={16} />
+              Game Options
+            </CardTitle>
+            <CardDescription>Configure tipping rules for this competition</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between rounded-lg border border-border p-4">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">Allow Draw Tips</Label>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, entrants can tip a draw on any fixture. Applies to sports like AFL and NRL where draws are possible.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0 ml-4">
+                <span className="text-xs text-muted-foreground">{allowDraw ? "On" : "Off"}</span>
+                <Switch
+                  checked={allowDraw}
+                  onCheckedChange={(checked) => {
+                    setAllowDraw(checked);
+                    updateSettings.mutate({ competitionId: selectedComp, allowDraw: checked });
+                  }}
+                  disabled={updateSettings.isPending || selectedComp === 0}
+                />
+              </div>
+            </div>
           </CardContent>
         </Card>
 

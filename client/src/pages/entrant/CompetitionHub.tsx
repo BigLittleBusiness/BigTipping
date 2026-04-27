@@ -10,8 +10,10 @@ import { toast } from "sonner";
 import {
   Trophy, CheckCircle2, XCircle, Circle, ChevronLeft,
   Flame, Clock, AlertCircle, Lock, MapPin, Calendar,
-  ChevronDown, ChevronUp, Minus,
+  ChevronDown, ChevronUp, Minus, BarChart2,
 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from "recharts";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "wouter";
 
 const RANK_BADGE: Record<number, { label: string; cls: string }> = {
@@ -51,6 +53,7 @@ export default function CompetitionHub() {
 
   const [selectedRoundId, setSelectedRoundId] = useState<number | null>(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [showChart, setShowChart] = useState(false);
 
   // Active round: next after last scored → open → first with fixtures → first
   const activeRoundId = useMemo(() => {
@@ -124,6 +127,18 @@ export default function CompetitionHub() {
     return Object.values(groups).sort((a, b) => b.roundNumber - a.roundNumber);
   }, [history]);
 
+  // Build a lookup: roundId -> tips[] for use in breakdown
+  const historyByRoundId = useMemo(() => {
+    if (!history?.length) return {} as Record<number, typeof history>;
+    const map: Record<number, typeof history> = {};
+    for (const t of history) {
+      const rid = t.round?.id ?? 0;
+      if (!map[rid]) map[rid] = [];
+      map[rid].push(t);
+    }
+    return map;
+  }, [history]);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Top nav */}
@@ -177,7 +192,8 @@ export default function CompetitionHub() {
 
               {/* Round-by-round breakdown toggle */}
               {roundBreakdown && roundBreakdown.length > 0 && (
-                <div className="mt-3 border-t border-white/20 pt-3">
+                <div className="mt-3 border-t border-white/20 pt-3 space-y-2">
+                  {/* Breakdown rows */}
                   <button
                     className="flex items-center gap-1.5 text-xs font-medium opacity-80 hover:opacity-100 transition-opacity"
                     onClick={() => setShowBreakdown(v => !v)}
@@ -186,16 +202,107 @@ export default function CompetitionHub() {
                     Round-by-round breakdown
                   </button>
                   {showBreakdown && (
-                    <div className="mt-2 space-y-1 max-h-48 overflow-y-auto pr-1">
-                      {roundBreakdown.map(r => (
-                        <div key={r.roundId} className="flex items-center justify-between text-xs">
-                          <span className="opacity-70 truncate">{r.roundLabel}</span>
-                          <div className="flex items-center gap-3 shrink-0 ml-2">
-                            <span className="opacity-60">{r.correct}/{r.total}</span>
-                            <span className="font-mono font-bold">+{r.points}</span>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="mt-1 space-y-2 max-h-64 overflow-y-auto pr-1">
+                      <TooltipProvider delayDuration={200}>
+                        {roundBreakdown.map(r => {
+                          const roundTips = historyByRoundId[r.roundId] ?? [];
+                          return (
+                            <div key={r.roundId} className="space-y-1">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="opacity-70 truncate font-semibold">{r.roundLabel}</span>
+                                <div className="flex items-center gap-3 shrink-0 ml-2">
+                                  <span className="opacity-60">{r.correct}/{r.total}</span>
+                                  <span className="font-mono font-bold">+{r.points}</span>
+                                </div>
+                              </div>
+                              {/* Fixture-level tipped teams */}
+                              {roundTips.length > 0 && (
+                                <div className="pl-2 space-y-0.5">
+                                  {roundTips.map(t => {
+                                    const home = t.fixture?.homeTeam;
+                                    const away = t.fixture?.awayTeam;
+                                    const picked = t.isDraw ? "Draw" : t.pickedTeam?.abbreviation ?? t.pickedTeam?.name ?? "?";
+                                    const matchup = home && away ? `${home.abbreviation ?? home.name} v ${away.abbreviation ?? away.name}` : "Match";
+                                    return (
+                                      <Tooltip key={t.id}>
+                                        <TooltipTrigger asChild>
+                                          <div className="flex items-center justify-between text-xs cursor-default">
+                                            <span className="opacity-50 truncate">{matchup}</span>
+                                            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                              {t.isCorrect === true  && <CheckCircle2 size={10} className="text-green-400" />}
+                                              {t.isCorrect === false && <XCircle size={10} className="text-red-400" />}
+                                              {t.isCorrect === null  && <Circle size={10} className="opacity-40" />}
+                                              <span className={`font-semibold ${
+                                                t.isCorrect === true ? "text-green-300" :
+                                                t.isCorrect === false ? "text-red-300" : "opacity-60"
+                                              }`}>{picked}</span>
+                                            </div>
+                                          </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="left" className="text-xs max-w-[200px]">
+                                          <p className="font-semibold">{home?.name ?? "Home"} v {away?.name ?? "Away"}</p>
+                                          <p>Tipped: <span className="font-bold">{t.isDraw ? "Draw" : t.pickedTeam?.name ?? "?"}</span></p>
+                                          {t.fixture?.venue && <p className="opacity-70">{t.fixture.venue}</p>}
+                                          {t.pointsEarned !== null && <p>Points: +{t.pointsEarned}</p>}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </TooltipProvider>
+                    </div>
+                  )}
+
+                  {/* Season accuracy chart toggle */}
+                  <button
+                    className="flex items-center gap-1.5 text-xs font-medium opacity-80 hover:opacity-100 transition-opacity"
+                    onClick={() => setShowChart(v => !v)}
+                  >
+                    {showChart ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                    <BarChart2 size={12} />
+                    Season accuracy chart
+                  </button>
+                  {showChart && (
+                    <div className="mt-1">
+                      <ResponsiveContainer width="100%" height={110}>
+                        <BarChart
+                          data={roundBreakdown.map(r => ({
+                            label: r.roundLabel.replace(/^Round /i, "R"),
+                            accuracy: r.total > 0 ? Math.round((r.correct / r.total) * 100) : 0,
+                            correct: r.correct,
+                            total: r.total,
+                          }))}
+                          margin={{ top: 4, right: 4, left: -28, bottom: 0 }}
+                          barCategoryGap="20%"
+                        >
+                          <XAxis dataKey="label" tick={{ fontSize: 9, fill: "rgba(255,255,255,0.6)" }} axisLine={false} tickLine={false} />
+                          <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: "rgba(255,255,255,0.6)" }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
+                          <RechartsTooltip
+                            contentStyle={{ background: "#1e293b", border: "none", borderRadius: 6, fontSize: 11 }}
+                            labelStyle={{ color: "#fff", fontWeight: 600 }}
+                            formatter={(value: number, _name: string, props: { payload?: { correct: number; total: number } }) => [
+                              `${value}% (${props.payload?.correct ?? 0}/${props.payload?.total ?? 0})`,
+                              "Accuracy",
+                            ]}
+                          />
+                          <Bar dataKey="accuracy" radius={[3, 3, 0, 0]}>
+                            {roundBreakdown.map((r) => (
+                              <Cell
+                                key={r.roundId}
+                                fill={
+                                  r.total > 0 && (r.correct / r.total) >= 0.7 ? "#4ade80" :
+                                  r.total > 0 && (r.correct / r.total) >= 0.5 ? "#facc15" : "#f87171"
+                                }
+                              />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                      <p className="text-center text-[10px] opacity-50 mt-0.5">Accuracy % per scored round</p>
                     </div>
                   )}
                 </div>
