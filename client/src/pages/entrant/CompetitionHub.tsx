@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Trophy, CheckCircle2, XCircle, Circle, ChevronLeft, Flame, Clock, AlertCircle, Lock } from "lucide-react";
+import {
+  Trophy, CheckCircle2, XCircle, Circle, ChevronLeft,
+  Flame, Clock, AlertCircle, Lock, MapPin, Calendar,
+} from "lucide-react";
 import { Link } from "wouter";
 
 const RANK_BADGE: Record<number, { label: string; cls: string }> = {
@@ -15,6 +18,27 @@ const RANK_BADGE: Record<number, { label: string; cls: string }> = {
   2: { label: "Silver", cls: "bg-gray-100 text-gray-600 border border-gray-300" },
   3: { label: "Bronze", cls: "bg-orange-100 text-orange-700 border border-orange-300" },
 };
+
+/** Round status pill colours */
+const ROUND_STATUS_CLS: Record<string, string> = {
+  open:     "text-green-600",
+  upcoming: "text-blue-500",
+  closed:   "text-yellow-600",
+  scored:   "text-purple-600",
+};
+
+/** Format a UTC timestamp as a readable local date/time */
+function formatMatchTime(ts: Date | string | null | undefined): string {
+  if (!ts) return "Time TBC";
+  const d = new Date(ts);
+  return d.toLocaleString("en-AU", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 export default function CompetitionHub() {
   const params = useParams<{ id: string }>();
@@ -29,7 +53,24 @@ export default function CompetitionHub() {
   const { data: prizes } = trpc.prizes.list.useQuery({ competitionId: compId });
 
   const [selectedRoundId, setSelectedRoundId] = useState<number | null>(null);
-  const activeRoundId = selectedRoundId ?? currentRound?.id ?? null;
+
+  /**
+   * Active round selection logic:
+   * 1. Explicit user selection
+   * 2. Current open round
+   * 3. First round with fixtures loaded (fixtureCount > 0)
+   * 4. First round in the list
+   */
+  const activeRoundId = useMemo(() => {
+    if (selectedRoundId) return selectedRoundId;
+    if (currentRound?.id) return currentRound.id;
+    if (allRounds) {
+      const withFixtures = allRounds.find(r => (r as typeof r & { fixtureCount?: number }).fixtureCount ?? 0 > 0);
+      if (withFixtures) return withFixtures.id;
+      return allRounds[0]?.id ?? null;
+    }
+    return null;
+  }, [selectedRoundId, currentRound, allRounds]);
 
   const { data: roundTips, refetch: refetchTips } = trpc.tips.myRoundTips.useQuery(
     { roundId: activeRoundId!, competitionId: compId },
@@ -43,6 +84,7 @@ export default function CompetitionHub() {
   });
 
   const myEntry = leaderboard?.find(e => e.userId === user?.id);
+  const activeRound = allRounds?.find(r => r.id === activeRoundId);
 
   return (
     <div className="min-h-screen bg-background">
@@ -107,18 +149,55 @@ export default function CompetitionHub() {
 
           {/* ── TIPS TAB ─────────────────────────────────────────────── */}
           <TabsContent value="tips" className="mt-4 space-y-4">
-            {/* Deadline banner */}
-            {(() => {
-              const activeRound = allRounds?.find(r => r.id === activeRoundId);
-              if (!activeRound) return null;
+
+            {/* Round selector — all rounds, with fixture count and status indicator */}
+            {allRounds && allRounds.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                {allRounds.map(r => {
+                  const fc = (r as typeof r & { fixtureCount?: number }).fixtureCount ?? 0;
+                  const statusCls = ROUND_STATUS_CLS[r.status] ?? "text-muted-foreground";
+                  const isActive = activeRoundId === r.id;
+                  return (
+                    <button
+                      key={r.id}
+                      onClick={() => setSelectedRoundId(r.id)}
+                      className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      }`}
+                    >
+                      {r.name ?? `Round ${r.roundNumber}`}
+                      {/* Status dot */}
+                      {r.status === "open" && (
+                        <span className={`${isActive ? "text-green-300" : statusCls}`}>●</span>
+                      )}
+                      {/* Fixture count badge */}
+                      {fc > 0 && (
+                        <span className={`text-[10px] px-1.5 py-0 rounded-full font-bold ${
+                          isActive ? "bg-white/20 text-white" : "bg-background text-muted-foreground"
+                        }`}>
+                          {fc}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Deadline / status banner for the active round */}
+            {activeRound && (() => {
               const deadline = activeRound.tipsCloseAt ? new Date(activeRound.tipsCloseAt) : null;
               const now = new Date();
               const deadlinePassed = deadline ? now > deadline : false;
               const roundClosed = activeRound.status !== "open";
-              // Locked banner — shown when deadline has passed or round is not open
+
               if (deadlinePassed || roundClosed) {
                 const reason = activeRound.status === "upcoming"
                   ? "Tipping has not opened yet for this round."
+                  : activeRound.status === "scored"
+                  ? "This round has been scored. Results are shown below."
                   : deadlinePassed
                   ? `The tipping deadline passed on ${deadline!.toLocaleString("en-AU", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.`
                   : "Tipping is closed for this round.";
@@ -129,7 +208,7 @@ export default function CompetitionHub() {
                   </div>
                 );
               }
-              // Open — show deadline countdown
+
               if (!deadline) return null;
               const msLeft = deadline.getTime() - now.getTime();
               const hoursLeft = msLeft / (1000 * 60 * 60);
@@ -137,120 +216,150 @@ export default function CompetitionHub() {
               return (
                 <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-sm font-medium ${
                   isUrgent
-                    ? "bg-orange-50 border-orange-200 text-orange-800"
-                    : "bg-blue-50 border-blue-200 text-blue-800"
+                    ? "bg-orange-50 border-orange-200 text-orange-800 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-300"
+                    : "bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300"
                 }`}>
                   {isUrgent ? <AlertCircle size={16} className="shrink-0" /> : <Clock size={16} className="shrink-0" />}
                   <div>
                     <span className="font-semibold">Tips close </span>
                     <span>
                       {deadline.toLocaleString("en-AU", {
-                        weekday: "long",
-                        day: "numeric",
-                        month: "long",
-                        hour: "2-digit",
-                        minute: "2-digit",
+                        weekday: "long", day: "numeric", month: "long",
+                        hour: "2-digit", minute: "2-digit",
                       })}
                     </span>
                     {isUrgent && (
-                      <span className="ml-2 text-orange-600 font-bold">
-                        ({Math.ceil(hoursLeft)}h left!)
-                      </span>
+                      <span className="ml-2 font-bold">({Math.ceil(hoursLeft)}h left!)</span>
                     )}
                   </div>
                 </div>
               );
             })()}
-            {/* Round selector */}           {allRounds && allRounds.length > 0 && (
-              <div className="flex gap-2 flex-wrap">
-                {allRounds.map(r => (
-                  <button
-                    key={r.id}
-                    onClick={() => setSelectedRoundId(r.id)}
-                    className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
-                      activeRoundId === r.id
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    }`}
-                  >
-                    {r.name ?? `Round ${r.roundNumber}`}
-                    {r.status === "open" && <span className="ml-1 text-green-500">●</span>}
-                  </button>
-                ))}
-              </div>
-            )}
 
+            {/* Fixtures list */}
             {!activeRoundId ? (
               <Card>
                 <CardContent className="text-center py-12 text-muted-foreground">
-                  No open round right now. Check back soon!
+                  No rounds found for this competition.
                 </CardContent>
               </Card>
-            ) : !roundTips?.length ? (
+            ) : !roundTips ? (
               <Card>
                 <CardContent className="text-center py-12 text-muted-foreground">
-                  No fixtures in this round yet.
+                  Loading fixtures…
+                </CardContent>
+              </Card>
+            ) : roundTips.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-10 space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">No fixtures loaded for this round yet.</p>
+                  <p className="text-xs text-muted-foreground">The administrator will add fixtures before the round opens.</p>
                 </CardContent>
               </Card>
             ) : (
               <div className="space-y-3">
-                {roundTips.map(({ fixture, tip, pickedTeam }) => {
-                  const activeRound = allRounds?.find(r => r.id === activeRoundId);
+                {roundTips.map(({ fixture, tip }) => {
                   const isOpen = activeRound?.status === "open";
                   const deadline = activeRound?.tipsCloseAt ? new Date(activeRound.tipsCloseAt) : null;
                   const deadlinePassed = deadline ? new Date() > deadline : false;
-                  // A tip is locked if the round is not open OR the deadline has passed
                   const isLocked = !isOpen || deadlinePassed;
                   const isScored = fixture.status === "completed";
+
                   return (
-                    <Card key={fixture.id} className={[
-                      tip?.isCorrect === true ? "border-green-300 bg-green-50/30" :
-                      tip?.isCorrect === false ? "border-red-300 bg-red-50/30" : "",
-                      isLocked && !isScored ? "opacity-75" : "",
-                    ].join(" ")}>
-                      <CardContent className="py-4">
-                        <div className="flex items-center gap-2 mb-3">
-                          {tip?.isCorrect === true && <CheckCircle2 size={16} className="text-green-600" />}
-                          {tip?.isCorrect === false && <XCircle size={16} className="text-red-500" />}
-                          {tip?.isCorrect === null && tip && <Circle size={16} className="text-muted-foreground" />}
-                          <span className="text-xs text-muted-foreground">{fixture.venue ?? ""}</span>
-                          {/* Locked indicator on the card */}
+                    <Card
+                      key={fixture.id}
+                      className={[
+                        tip?.isCorrect === true  ? "border-green-300 bg-green-50/30 dark:bg-green-900/10" : "",
+                        tip?.isCorrect === false ? "border-red-300 bg-red-50/30 dark:bg-red-900/10" : "",
+                        isLocked && !isScored ? "opacity-80" : "",
+                      ].filter(Boolean).join(" ")}
+                    >
+                      <CardContent className="py-4 space-y-3">
+                        {/* Match info header: Home v Away */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {tip?.isCorrect === true  && <CheckCircle2 size={15} className="text-green-600 shrink-0" />}
+                            {tip?.isCorrect === false && <XCircle size={15} className="text-red-500 shrink-0" />}
+                            {tip?.isCorrect === null && tip && <Circle size={15} className="text-muted-foreground shrink-0" />}
+                            <span className="text-sm font-semibold truncate">
+                              {fixture.homeTeam?.name ?? "Home"}{" "}
+                              <span className="text-muted-foreground font-normal">v</span>{" "}
+                              {fixture.awayTeam?.name ?? "Away"}
+                            </span>
+                          </div>
                           {isLocked && !isScored && (
-                            <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
                               <Lock size={11} /> Locked
                             </span>
                           )}
                           {isScored && fixture.winner && (
-                            <span className="text-xs text-green-600 font-semibold ml-auto">
-                              Result: {fixture.winner.name} ({fixture.homeScore}–{fixture.awayScore})
+                            <span className="text-xs text-green-600 font-semibold shrink-0">
+                              {fixture.winner.name} won
                             </span>
                           )}
                         </div>
+
+                        {/* Venue & start time */}
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          {fixture.venue ? (
+                            <span className="flex items-center gap-1">
+                              <MapPin size={11} className="shrink-0" />
+                              {fixture.venue}
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 italic">
+                              <MapPin size={11} className="shrink-0" />
+                              Venue TBC
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1">
+                            <Calendar size={11} className="shrink-0" />
+                            {formatMatchTime(fixture.startTime)}
+                          </span>
+                        </div>
+
+                        {/* Team pick buttons */}
                         <div className="flex items-center gap-3">
-                          {/* Home team */}
                           <TeamButton
                             team={fixture.homeTeam}
                             selected={tip?.pickedTeamId === fixture.homeTeamId}
                             correct={isScored ? fixture.winnerId === fixture.homeTeamId : undefined}
                             disabled={isLocked}
                             onClick={() => {
-                              if (isLocked) { toast.error(deadlinePassed ? "The tipping deadline has passed." : "Tipping is closed for this round."); return; }
+                              if (isLocked) {
+                                toast.error(deadlinePassed ? "The tipping deadline has passed." : "Tipping is closed for this round.");
+                                return;
+                              }
                               submitTip.mutate({ fixtureId: fixture.id, competitionId: compId, pickedTeamId: fixture.homeTeamId });
                             }}
                           />
                           <span className="text-xs font-bold text-muted-foreground shrink-0">VS</span>
-                          {/* Away team */}
                           <TeamButton
                             team={fixture.awayTeam}
                             selected={tip?.pickedTeamId === fixture.awayTeamId}
                             correct={isScored ? fixture.winnerId === fixture.awayTeamId : undefined}
                             disabled={isLocked}
                             onClick={() => {
-                              if (isLocked) { toast.error(deadlinePassed ? "The tipping deadline has passed." : "Tipping is closed for this round."); return; }
+                              if (isLocked) {
+                                toast.error(deadlinePassed ? "The tipping deadline has passed." : "Tipping is closed for this round.");
+                                return;
+                              }
                               submitTip.mutate({ fixtureId: fixture.id, competitionId: compId, pickedTeamId: fixture.awayTeamId });
                             }}
                           />
                         </div>
+
+                        {/* Score if completed */}
+                        {isScored && fixture.homeScore !== null && fixture.awayScore !== null && (
+                          <div className="text-center text-xs text-muted-foreground font-mono">
+                            Final: {fixture.homeTeam?.abbreviation ?? fixture.homeTeam?.name ?? "Home"}{" "}
+                            <span className="font-bold text-foreground">{fixture.homeScore} – {fixture.awayScore}</span>{" "}
+                            {fixture.awayTeam?.abbreviation ?? fixture.awayTeam?.name ?? "Away"}
+                            {fixture.margin !== null && fixture.margin !== undefined && (
+                              <span className="ml-2 text-muted-foreground">(margin: {fixture.margin})</span>
+                            )}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   );
@@ -270,9 +379,9 @@ export default function CompetitionHub() {
                     {history.map(t => (
                       <div key={t.id} className="flex items-center justify-between px-4 py-3">
                         <div className="flex items-center gap-3">
-                          {t.isCorrect === true && <CheckCircle2 size={16} className="text-green-600 shrink-0" />}
+                          {t.isCorrect === true  && <CheckCircle2 size={16} className="text-green-600 shrink-0" />}
                           {t.isCorrect === false && <XCircle size={16} className="text-red-500 shrink-0" />}
-                          {t.isCorrect === null && <Circle size={16} className="text-muted-foreground shrink-0" />}
+                          {t.isCorrect === null  && <Circle size={16} className="text-muted-foreground shrink-0" />}
                           <span className="text-sm font-medium">{t.pickedTeam?.name ?? "Unknown"}</span>
                         </div>
                         <span className="font-mono text-sm font-bold text-primary">+{t.pointsEarned}</span>
@@ -371,7 +480,9 @@ export default function CompetitionHub() {
   );
 }
 
-function TeamButton({ team, selected, correct, disabled, onClick }: {
+function TeamButton({
+  team, selected, correct, disabled, onClick,
+}: {
   team: { id: number; name: string; abbreviation?: string | null } | null;
   selected: boolean;
   correct?: boolean;
@@ -380,8 +491,8 @@ function TeamButton({ team, selected, correct, disabled, onClick }: {
 }) {
   const base = "flex-1 flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all font-medium text-sm";
   const state = selected
-    ? correct === true ? "border-green-500 bg-green-50 text-green-700"
-      : correct === false ? "border-red-400 bg-red-50 text-red-600"
+    ? correct === true  ? "border-green-500 bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300"
+      : correct === false ? "border-red-400 bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400"
       : "border-primary bg-primary/10 text-primary"
     : disabled
     ? "border-border bg-muted/30 text-muted-foreground cursor-default"

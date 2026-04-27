@@ -314,3 +314,11 @@
 ## Phase 25: Fixture Count on Round Cards
 
 - [x] Add fixture count to each round card on the Round Management page
+
+## Phase 26: Tips Entry Screen — Fixture Display & Any-Round Tipping
+
+- [x] Allow entrants to tip any round that has fixtures loaded (not just the current open round)
+- [x] Show round selector for all rounds (with status indicators: open, upcoming, locked, scored)
+- [x] Each fixture card must display: Home Team v Away Team — Venue — Start Time
+- [x] Venue and start time should be clearly visible below the team buttons
+- [x] Rounds with no fixtures should show an appropriate empty state
